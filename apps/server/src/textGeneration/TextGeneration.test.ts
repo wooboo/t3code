@@ -97,6 +97,53 @@ describe("TextGeneration.make", () => {
       expect(prompt).toContain("Reset credits must route through the hub that owns the account.");
     }),
   );
+});
+
+describe("makeTextGenerationFromRegistry", () => {
+  it.effect("does not use the executor when a provider lacks voice inference", () =>
+    Effect.gen(function* () {
+      const instanceId = ProviderInstanceId.make("cursor");
+      const service = TextGeneration.makeTextGenerationFromRegistry(
+        makeStubRegistry([makeStubInstance(instanceId, makeStubTextGeneration({}))]),
+        {} as SourceControlProviderRegistry.SourceControlProviderRegistry["Service"],
+      );
+      const error = yield* service.generateVoiceResponse!({
+        modelSelection: { instanceId, model: "auto" },
+        cwd: "/unused",
+        prompt: "Hello",
+      }).pipe(Effect.flip);
+      expect(error.detail).toContain("tool-free voice inference");
+    }),
+  );
+
+  it.effect("routes voice inference by configured instance without changing model options", () =>
+    Effect.gen(function* () {
+      const instanceId = ProviderInstanceId.make("voice_account");
+      const input = {
+        modelSelection: createModelSelection(instanceId, "chosen-model"),
+        cwd: "/isolated",
+        prompt: "Hello",
+      };
+      const service = TextGeneration.makeTextGenerationFromRegistry(
+        makeStubRegistry([
+          makeStubInstance(
+            instanceId,
+            makeStubTextGeneration({
+              generateVoiceResponse: (received) => {
+                expect(received).toEqual(input);
+                return Effect.succeed({ text: "Cześć", toolCalls: [] });
+              },
+            }),
+          ),
+        ]),
+        {} as SourceControlProviderRegistry.SourceControlProviderRegistry["Service"],
+      );
+      expect(yield* service.generateVoiceResponse!(input)).toEqual({
+        text: "Cześć",
+        toolCalls: [],
+      });
+    }),
+  );
 
   it.effect("delegates to the matching instance's textGeneration closure", () =>
     Effect.gen(function* () {

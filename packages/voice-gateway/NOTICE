@@ -1,0 +1,9 @@
+qwen-audio-agent
+Copyright 2026 qwen-audio-agent contributors
+
+This product includes software developed by third-party open-source projects.
+See THIRD_PARTY_NOTICES.md for the primary component notices.
+
+Adapted for T3 Code, September 2026: injected T3 executor and coordinator,
+removed standalone web hosting and ACP defaults, disabled wake-word downloads.
+Gateway source is maintained in this repository.

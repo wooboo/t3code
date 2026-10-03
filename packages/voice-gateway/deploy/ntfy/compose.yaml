@@ -1,0 +1,45 @@
+services:
+  ntfy:
+    image: binwiederhier/ntfy:v2.28.0
+    command: serve
+    restart: unless-stopped
+    environment:
+      NTFY_BASE_URL: https://${NTFY_HOSTNAME:?Set the DNS hostname for this push server}
+      NTFY_LISTEN_HTTP: ":80"
+      NTFY_BEHIND_PROXY: "true"
+      NTFY_CACHE_FILE: /var/lib/ntfy/cache.db
+      NTFY_CACHE_DURATION: 1h
+      NTFY_AUTH_FILE: /var/lib/ntfy/auth.db
+      NTFY_AUTH_DEFAULT_ACCESS: deny-all
+      # UnifiedPush application servers publish encrypted messages to opaque up* topics.
+      # Reading still requires the phone's ntfy account.
+      NTFY_AUTH_ACCESS: "*:up*:write-only"
+      NTFY_ENABLE_SIGNUP: "false"
+    ports:
+      - "${NTFY_BIND_ADDRESS:-127.0.0.1}:${NTFY_PORT:-8180}:80"
+    volumes:
+      - ntfy-data:/var/lib/ntfy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  # Optional standalone TLS. Omit this profile when using an existing reverse proxy.
+  caddy:
+    image: caddy:2-alpine
+    profiles: [tls]
+    restart: unless-stopped
+    environment:
+      NTFY_HOSTNAME: ${NTFY_HOSTNAME:?Set the DNS hostname for this push server}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      ntfy:
+        condition: service_healthy
+volumes:
+  ntfy-data:
+  caddy-data:
+  caddy-config:

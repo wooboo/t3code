@@ -279,6 +279,19 @@ const makeFixture = Effect.fn("makeAntigravityTextGenerationFixture")(function* 
 });
 
 it.layer(NodeServices.layer)("AntigravityTextGeneration", (it) => {
+  it.effect("voice inference runs in an isolated helper and cleans its native session", () =>
+    Effect.gen(function* () {
+      const fixture = yield* makeFixture({ outputs: ['{"text":"Cześć","toolCalls":[]}'] });
+      const result = yield* fixture.textGeneration.generateVoiceResponse({
+        cwd: fixture.projectDirectory,
+        modelSelection,
+        prompt: "Hello",
+      });
+      expect(result).toEqual({ text: "Cześć", toolCalls: [] });
+      yield* fixture.assertCleaned;
+    }).pipe(Effect.scoped),
+  );
+
   it.effect(
     "generates all helper types in empty workspaces and removes only owned session files",
     () =>

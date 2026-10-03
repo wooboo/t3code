@@ -132,10 +132,12 @@ import { ComposerQueuedEditBanner } from "./ComposerQueuedEdit";
 import { useThreadQueuedCount } from "./ThreadQueueControl";
 import type { ThreadContentPresentation } from "./threadContentPresentation";
 import { resolveThreadFeedSubmissionAnchor } from "./thread-feed-live-follow";
+import { useVoiceCall } from "../voice-call/useVoiceCall";
 
 export interface ThreadDetailScreenProps {
   readonly worktreeSetup?: WorktreeSetupCardProps | null;
   readonly setupWorkingStartedAt?: string | null;
+  readonly initialVoiceCallOpen?: boolean;
   readonly selectedThread: EnvironmentThreadShell;
   readonly contentPresentation: ThreadContentPresentation;
   readonly screenTone: StatusTone;
@@ -322,6 +324,10 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
       threadId: props.selectedThread.id,
     });
   }, [navigation, props.environmentId, props.selectedThread.id]);
+  const voiceCall = useVoiceCall({
+    environmentId: props.environmentId,
+    threadId: props.selectedThread.id,
+  });
   const insets = useSafeAreaInsets();
   const isKeyboardVisible = useKeyboardState((state) => state.isVisible);
   const liveKeyboardHeight = useKeyboardState((state) => state.height);
@@ -1300,6 +1306,8 @@ export const ThreadDetailScreen = memo(function ThreadDetailScreen(props: Thread
                   <>
                     <ThreadComposer
                       reportedModelSelection={reportedModelSelection}
+                      voiceCall={voiceCall}
+                      initialVoiceCallOpen={props.initialVoiceCallOpen}
                       editorRef={composerEditorRef}
                       draftMessage={props.draftMessage}
                       draftAttachments={props.draftAttachments}

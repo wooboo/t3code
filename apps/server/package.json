@@ -16,8 +16,8 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/bin.ts",
-    "build:bundle": "vp pack",
     "build:exe": "node scripts/cli.ts build-exe",
+    "build:bundle": "vp pack && vp pack ../../packages/voice-gateway/src/worker.mjs --out-dir dist/voice-bundle --no-clean",
     "start": "node dist/bin.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vp test run",

@@ -23,6 +23,9 @@ const runtimeMock = {
     authHeaders: [] as Array<string | null>,
     closeCalls: [] as string[],
     sessionCreateCalls: 0,
+    permissions: [] as unknown[],
+    deletedSessions: [] as string[],
+    abortedSessions: [] as string[],
     connectionError: undefined as Error | undefined,
     sessionCreateError: undefined as unknown,
     sessionResult: undefined as { data?: { id: string } } | undefined,
@@ -38,6 +41,9 @@ const runtimeMock = {
     this.state.authHeaders.length = 0;
     this.state.closeCalls.length = 0;
     this.state.sessionCreateCalls = 0;
+    this.state.permissions.length = 0;
+    this.state.deletedSessions.length = 0;
+    this.state.abortedSessions.length = 0;
     this.state.connectionError = undefined;
     this.state.sessionCreateError = undefined;
     this.state.sessionResult = undefined;
@@ -94,8 +100,17 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntime.OpenCodeRuntimeShape = {
   createOpenCodeSdkClient: ({ baseUrl, serverPassword }) =>
     ({
       session: {
-        create: async () => {
+        abort: async ({ sessionID }: { sessionID: string }) => {
+          runtimeMock.state.abortedSessions.push(sessionID);
+          return { data: true };
+        },
+        delete: async ({ sessionID }: { sessionID: string }) => {
+          runtimeMock.state.deletedSessions.push(sessionID);
+          return { data: true };
+        },
+        create: async (input: { permission: unknown }) => {
           runtimeMock.state.sessionCreateCalls += 1;
+          runtimeMock.state.permissions.push(input.permission);
           if (runtimeMock.state.sessionCreateError !== undefined) {
             throw runtimeMock.state.sessionCreateError;
           }
@@ -235,6 +250,27 @@ const advanceIdleClock = Effect.gen(function* () {
 });
 
 it.layer(OpenCodeTextGenerationTestLayer)("OpenCodeTextGeneration", (it) => {
+  it.effect("voice denies native tool permissions and deletes only its helper session", () =>
+    withOpenCodeTextGeneration(DEFAULT_OPENCODE_SETTINGS, (service) =>
+      Effect.gen(function* () {
+        runtimeMock.state.promptResult = {
+          data: { parts: [{ type: "text", text: '{"text":"Cześć","toolCalls":[]}' }] },
+        };
+        const result = yield* service.generateVoiceResponse!({
+          cwd: process.cwd(),
+          modelSelection: DEFAULT_TEST_MODEL_SELECTION,
+          prompt: "Hello",
+        });
+        expect(result.text).toBe("Cześć");
+        expect(runtimeMock.state.permissions).toEqual([
+          [{ permission: "*", pattern: "*", action: "deny" }],
+        ]);
+        expect(runtimeMock.state.abortedSessions).toEqual(["http://127.0.0.1:4301/session"]);
+        expect(runtimeMock.state.deletedSessions).toEqual(runtimeMock.state.abortedSessions);
+      }),
+    ),
+  );
+
   it.effect("excludes generic files from thread title generation", () =>
     withOpenCodeTextGeneration(DEFAULT_OPENCODE_SETTINGS, (textGeneration) =>
       Effect.gen(function* () {

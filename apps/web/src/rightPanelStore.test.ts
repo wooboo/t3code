@@ -501,6 +501,22 @@ describe("rightPanelStore", () => {
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refB)).toBeNull();
   });
 
+  it("opens voice as a thread-scoped singleton surface", () => {
+    useRightPanelStore.getState().open(refA, "voice");
+    useRightPanelStore.getState().open(refA, "voice");
+    expect(selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA)).toEqual({
+      isOpen: true,
+      activeSurfaceId: "voice",
+      surfaces: [{ id: "voice", kind: "voice" }],
+    });
+    useRightPanelStore.getState().open(refA, "files");
+    useRightPanelStore.getState().closeSurface(refA, "voice");
+    expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe("files");
+    useRightPanelStore.getState().open(refA, "voice");
+    expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe("voice");
+    expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refB)).toBeNull();
+  });
+
   it("opening a different kind keeps both surfaces and activates the new one", () => {
     useRightPanelStore.getState().open(refA, "device");
     useRightPanelStore.getState().open(refA, "preview");

@@ -214,6 +214,8 @@ export const make = Effect.gen(function* () {
     serverVersion: packageJson.version,
     orchestrationProtocolVersion: ORCHESTRATION_PROTOCOL_VERSION,
     capabilities: {
+      voice: process.env.T3_VOICE_ENABLED === "1",
+      voiceCallbacks: process.env.T3_VOICE_ENABLED === "1",
       repositoryIdentity: true,
       connectionProbe: true,
       attachmentUploads: true,

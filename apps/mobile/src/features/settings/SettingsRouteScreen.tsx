@@ -89,6 +89,9 @@ function ConfiguredSettingsRouteScreen() {
           <SettingsRow icon="bell.badge" label="Notifications" target="SettingsNotifications" />
         </SettingsSection>
 
+        <SettingsSection title="Voice">
+          <SettingsRow icon="mic" label="Voice" target="SettingsVoice" />
+        </SettingsSection>
         <SettingsIndexSections />
       </ScrollView>
     </View>
@@ -121,6 +124,9 @@ function LocalSettingsRouteScreen() {
           />
         </SettingsSection>
 
+        <SettingsSection title="Voice">
+          <SettingsRow icon="mic" label="Voice" target="SettingsVoice" />
+        </SettingsSection>
         <SettingsIndexSections />
       </ScrollView>
     </View>

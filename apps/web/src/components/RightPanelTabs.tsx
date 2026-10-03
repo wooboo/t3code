@@ -14,6 +14,7 @@ import type {
 } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
 import {
+  Mic,
   Smartphone,
   ChevronDown,
   ChevronLeft,
@@ -123,6 +124,8 @@ interface RightPanelTabsProps {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddDevice: () => void;
+  onAddVoice?: (() => void) | undefined;
+  voiceAvailable?: boolean | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -320,6 +323,8 @@ function RightPanelEmptyState(props: {
   onAddPullRequest: () => void;
   onAddPullRequests: () => void;
   onAddDevice: () => void;
+  onAddVoice?: (() => void) | undefined;
+  voiceAvailable?: boolean | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -379,6 +384,16 @@ function RightPanelEmptyState(props: {
       available: props.pullRequestsAvailable,
       disabledReason: SURFACE_UNAVAILABLE_HINTS.pullRequests,
       onClick: props.onAddPullRequests,
+    },
+    {
+      label: "Voice",
+      description: "Talk to your LiveKit agent.",
+      icon: Mic,
+      shortcut: "V",
+      available: props.voiceAvailable ?? false,
+      disabledReason: "Open a saved thread to use voice.",
+      onClick: () => props.onAddVoice?.(),
+      badgeCount: 0,
     },
     {
       label: "Device",
@@ -598,6 +613,8 @@ function surfaceTitle(
       return "Pull requests";
     case "device":
       return surface.title ?? surface.target?.name ?? "Device";
+    case "voice":
+      return "Voice";
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return "Browser";
@@ -687,6 +704,8 @@ function SurfaceIcon({
       ) : (
         <Smartphone className="size-3 shrink-0" />
       );
+    case "voice":
+      return <Volume2 className="size-3 shrink-0" />;
   }
 }
 
@@ -880,6 +899,16 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
       available: props.pullRequestsAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.pullRequests,
       onClick: props.onAddPullRequests,
+    },
+    {
+      label: "Voice",
+      description: "Talk to your LiveKit agent.",
+      icon: Mic,
+      shortcut: "V",
+      available: props.voiceAvailable ?? false,
+      disabledReason: "Open a saved thread to use voice.",
+      onClick: () => props.onAddVoice?.(),
+      badgeCount: 0,
     },
     {
       label: "Device",
@@ -1372,6 +1401,8 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddPullRequest={props.onAddPullRequest}
             onAddPullRequests={props.onAddPullRequests}
             onAddDevice={props.onAddDevice}
+            onAddVoice={props.onAddVoice}
+            voiceAvailable={props.voiceAvailable}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}

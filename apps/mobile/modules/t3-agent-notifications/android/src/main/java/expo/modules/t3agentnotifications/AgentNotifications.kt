@@ -19,7 +19,15 @@ import com.google.firebase.messaging.RemoteMessage
 import expo.modules.notifications.service.ExpoFirebaseMessagingService
 
 class AgentMessagingService : ExpoFirebaseMessagingService() {
+  override fun onNewToken(token: String) {
+    super.onNewToken(token)
+    VoiceFcmPush.rotated(this, token)
+  }
   override fun onMessageReceived(remoteMessage: RemoteMessage) {
+    if (remoteMessage.data["t3_kind"] == "voice_call") {
+      VoiceFcmPush.receive(this, remoteMessage.data)
+      return
+    }
     if (remoteMessage.data["t3_kind"] == "agent_activity") {
       AgentNotifications.receive(this, remoteMessage.data)
     } else {

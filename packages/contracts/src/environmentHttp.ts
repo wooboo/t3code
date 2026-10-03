@@ -5,8 +5,16 @@ import * as HttpApi from "effect/unstable/httpapi/HttpApi";
 import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
 import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
+import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
 import * as HttpServerRespondable from "effect/unstable/http/HttpServerRespondable";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import {
+  VoiceInferenceCatalogue,
+  VoiceInferenceEvent,
+  VoiceInferenceInput,
+  VoiceInferenceResult,
+} from "./voiceInference.ts";
+import { TextGenerationError } from "./git.ts";
 
 import {
   AuthAccessTokenResult,
@@ -651,7 +659,43 @@ class EnvironmentConnectHttpApi extends HttpApiGroup.make("connect")
     }),
   ) {}
 
+export class EnvironmentVoiceHttpApi extends HttpApiGroup.make("voice")
+  .add(
+    HttpApiEndpoint.post("stream", "/api/voice/stream", {
+      headers: OptionalBearerHeaders,
+      payload: VoiceInferenceInput,
+      success: HttpApiSchema.StreamSse({ data: VoiceInferenceEvent }),
+      error: [
+        TextGenerationError,
+        EnvironmentAuthInvalidError,
+        EnvironmentScopeRequiredError,
+        EnvironmentInternalError,
+      ],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("respond", "/api/voice/respond", {
+      headers: OptionalBearerHeaders,
+      payload: VoiceInferenceInput,
+      success: VoiceInferenceResult,
+      error: [
+        TextGenerationError,
+        EnvironmentAuthInvalidError,
+        EnvironmentScopeRequiredError,
+        EnvironmentInternalError,
+      ],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.get("catalogue", "/api/voice/catalogue", {
+      headers: OptionalBearerHeaders,
+      success: VoiceInferenceCatalogue,
+      error: [EnvironmentAuthInvalidError, EnvironmentScopeRequiredError, EnvironmentInternalError],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  ) {}
+
 export class EnvironmentHttpApi extends HttpApi.make("environment")
+  .add(EnvironmentVoiceHttpApi)
   .add(EnvironmentMetadataHttpApi)
   .add(EnvironmentAuthHttpApi)
   .add(EnvironmentOrchestrationHttpApi)

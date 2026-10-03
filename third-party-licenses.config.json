@@ -1,6 +1,30 @@
 {
   "customNotices": [
     {
+      "bundles": ["android", "mobile"],
+      "license": "Apache-2.0",
+      "name": "UnifiedPush Android Connector",
+      "version": "3.3.5",
+      "sourceUrl": "https://codeberg.org/UnifiedPush/android-connector",
+      "generatedNotices": [
+        {
+          "licenseId": "Apache-2.0"
+        }
+      ]
+    },
+    {
+      "bundles": ["android", "mobile"],
+      "license": "Apache-2.0",
+      "name": "Tink",
+      "version": "1.23.0",
+      "sourceUrl": "https://github.com/tink-crypto/tink-java",
+      "generatedNotices": [
+        {
+          "licenseId": "Apache-2.0"
+        }
+      ]
+    },
+    {
       "bundles": ["assets", "desktop", "web"],
       "license": "CC0-1.0",
       "name": "Notification Sound 1 by deadrobotmusic",
@@ -598,6 +622,16 @@
       "generatedNotice": {
         "licenseId": "MIT",
         "copyrights": ["Copyright (c) 2015-present 650 Industries, Inc. (aka Expo)"]
+      }
+    },
+    {
+      "name": "@config-plugins/react-native-webrtc",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": ["Copyright (c) expo/config-plugins contributors"],
+        "preamble": [
+          "This package declares the MIT license in its package.json; its published archive does not include a separate license file. Source: https://github.com/expo/config-plugins/tree/main/packages/react-native-webrtc"
+        ]
       }
     }
   ]

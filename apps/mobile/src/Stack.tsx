@@ -1,3 +1,5 @@
+import { CallbackPushRegistration } from "./features/voice-call/CallbackPushRegistration";
+import { IncomingVoiceCallScreen } from "./features/voice-call/IncomingVoiceCallScreen";
 import {
   createPathConfigForStaticNavigation,
   getPathFromState,
@@ -70,6 +72,7 @@ import {
 } from "./features/threads/ThreadSettingsSheet";
 import { NewTaskFlowProvider } from "./features/threads/new-task-flow-provider";
 import { NewTaskRouteScreen } from "./features/threads/NewTaskRouteScreen";
+import { SettingsVoiceRouteScreen } from "./features/settings/SettingsVoiceRouteScreen";
 import { SettingsAppearanceRouteScreen } from "./features/settings/SettingsAppearanceRouteScreen";
 import { SettingsClientStorageRouteScreen } from "./features/settings/SettingsClientStorageRouteScreen";
 import { SettingsDiagnosticsRouteScreen } from "./features/diagnostics/SettingsDiagnosticsRouteScreen";
@@ -267,6 +270,11 @@ const SettingsContentStack = createNativeStackNavigator({
       options: {
         title: "Archived Threads",
       },
+    }),
+    SettingsVoice: createNativeStackScreen({
+      screen: SettingsVoiceRouteScreen,
+      linking: "voice",
+      options: { title: "Voice" },
     }),
     SettingsAppearance: createNativeStackScreen({
       screen: SettingsAppearanceRouteScreen,
@@ -614,6 +622,7 @@ function RootStackLayout(props: {
   return (
     <HardwareKeyboardCommandProvider pathname={pathname}>
       <ThreadOutboxDrainWorker />
+      <CallbackPushRegistration />
       <ShowcaseCaptureCoordinator pathname={pathname} />
       <ExistingThreadSettingsRouteProvider>
         <AdaptiveWorkspaceLayout
@@ -683,6 +692,11 @@ const RootStackConfig = createNativeStackNavigator({
         headerBackVisible: false,
         ...getCompactBrandHeaderOptions(),
       },
+    }),
+    IncomingVoiceCall: createNativeStackScreen({
+      screen: IncomingVoiceCallScreen,
+      linking: "voice-calls/:hostEnvironmentId/:callId",
+      options: { headerShown: false },
     }),
     Thread: createNativeStackScreen({
       screen: ThreadRouteScreen,

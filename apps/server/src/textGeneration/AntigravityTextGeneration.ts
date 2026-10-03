@@ -21,6 +21,7 @@ import { applyAntigravityAcpModelSelection } from "../provider/acp/AntigravityAc
 import { removeAntigravitySessionFiles } from "../provider/acp/AntigravitySessionFiles.ts";
 import type { AcpSessionRuntime } from "../provider/acp/AcpSessionRuntime.ts";
 import type * as TextGeneration from "./TextGeneration.ts";
+import { buildVoiceResponsePrompt } from "./VoiceTextGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
@@ -410,6 +411,15 @@ export const makeAntigravityTextGeneration = Effect.fn("makeAntigravityTextGener
     });
 
   return {
+    generateVoiceResponse: (input) => {
+      const { prompt, outputSchema } = buildVoiceResponsePrompt(input.prompt);
+      return runAntigravityJson({
+        ...input,
+        prompt,
+        outputSchema,
+        operation: "generateVoiceResponse",
+      });
+    },
     generateCommitMessage,
     generatePrContent,
     generateBranchName,

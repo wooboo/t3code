@@ -15,6 +15,7 @@ import {
   useQuestionAttachmentPreparation,
   changeQuestionAttachmentPreparation,
 } from "../../questionAttachments";
+import { VoiceButton, type Voice } from "./VoiceFront";
 import type {
   ApprovalRequestId,
   KeybindingCommand,
@@ -1674,6 +1675,8 @@ export interface ChatComposerProps {
   setThreadError: (threadId: ThreadId | null, error: string | null) => void;
   onExpandImage: (preview: ExpandedImagePreview) => void;
   onFileOpen: (attachment: ChatFileAttachment) => void;
+  voice: Voice;
+  onOpenVoicePanel: () => void;
 }
 
 // --------------------------------------------------------------------------
@@ -1781,6 +1784,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     onFileOpen,
     editingQueuedAttachments,
     onRemoveEditingQueuedAttachment,
+    voice,
+    onOpenVoicePanel,
   } = props;
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const composerDraftTargetKey = composerTargetKey(composerDraftTarget);
@@ -6788,6 +6793,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                         : "Ask anything...")}
                 </button>
                 {collapsedComposerImagePreviews}
+                <VoiceButton voice={voice} onOpenPanel={onOpenVoicePanel} />
                 <button
                   type="button"
                   data-chat-composer-transition-actions="true"
@@ -7465,6 +7471,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       </Tooltip>
                     </>
                   ) : null}
+                  <VoiceButton voice={voice} onOpenPanel={onOpenVoicePanel} />
                   <ComposerFooterPrimaryActions
                     compact={isComposerResting || isComposerPrimaryActionsCompact}
                     activeContextWindow={

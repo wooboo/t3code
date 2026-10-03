@@ -20,6 +20,7 @@ import { resolveSpawnCommand } from "@t3tools/shared/shell";
 
 import { TextGenerationError } from "@t3tools/contracts";
 import * as TextGeneration from "./TextGeneration.ts";
+import { buildVoiceResponsePrompt } from "./VoiceTextGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
@@ -102,7 +103,8 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle",
+      | "generateThreadTitle"
+      | "generateVoiceResponse",
     value: unknown,
     detail: string,
   ): Effect.Effect<string, TextGenerationError> =>
@@ -132,7 +134,8 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateVoiceResponse";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -214,6 +217,15 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
           "",
           "--disable-slash-commands",
           "--strict-mcp-config",
+          ...(operation === "generateVoiceResponse"
+            ? [
+                "--mcp-config",
+                '{"mcpServers":{}}',
+                "--setting-sources",
+                "",
+                "--no-session-persistence",
+              ]
+            : []),
           "--permission-mode",
           "dontAsk",
         ],
@@ -412,6 +424,15 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
     });
 
   return {
+    generateVoiceResponse: (input) => {
+      const { prompt, outputSchema } = buildVoiceResponsePrompt(input.prompt);
+      return runClaudeJson({
+        ...input,
+        prompt,
+        outputSchemaJson: outputSchema,
+        operation: "generateVoiceResponse",
+      });
+    },
     generateCommitMessage,
     generatePrContent,
     generateBranchName,

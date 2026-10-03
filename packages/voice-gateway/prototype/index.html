@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Diagnostyka LiveKit · T3</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script src="./livekit-client.js" defer></script>
+    <script type="module" src="./client.mjs"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <a href="/">← Wróć do T3</a>
+        <p>Prototyp · wyniki tylko w tej karcie</p>
+      </header>
+      <h1>Diagnostyka rozmowy LiveKit</h1>
+      <p id="thread">Ładowanie wątku…</p>
+      <p>
+        Sprawdź opóźnienie odpowiedzi i przerywanie rozmowy. Zlecone zadania wykonują się w wybranym
+        wątku T3 i mogą go zmieniać.
+      </p>
+      <fieldset id="variants">
+        <legend>Ścieżka głosu</legend>
+        <label><input type="radio" name="variant" value="livekit" checked /> LiveKit Agents</label>
+      </fieldset>
+      <label for="scenario">Scenariusz</label>
+      <select id="scenario">
+        <option value="short">Krótka odpowiedź: „Ile to dwa plus dwa?”</option>
+        <option value="pause">Pauza: „Chciałbym… [pauza]… krótką odpowiedź”</option>
+        <option value="interrupt">
+          Przerwanie: poproś o dłuższą odpowiedź, potem powiedz „stop”
+        </option>
+        <option value="delegate">
+          Zlecenie: poproś o sprawdzenie projektu; rozmawiaj podczas pracy
+        </option>
+        <option value="network">Połączenie: zmień sieć lub wygasz ekran podczas rozmowy</option>
+      </select>
+      <div class="actions">
+        <button id="start" disabled>Rozpocznij rozmowę</button>
+        <button id="mute" disabled>Wycisz mikrofon</button>
+        <button id="stop" disabled>Zakończ rozmowę</button>
+      </div>
+      <p id="status" role="status" aria-live="polite">Sprawdzanie konfiguracji…</p>
+      <p id="error" role="alert"></p>
+      <p id="configuration-note"></p>
+      <details>
+        <summary>Użyte modele</summary>
+        <pre id="config"></pre>
+      </details>
+      <section aria-labelledby="results-title">
+        <h2 id="results-title">Wyniki w tej karcie</h2>
+        <p>
+          Koniec mówienia → początek dźwięku. Wspólny detektor poziomu audio po stronie klienta;
+          pomiar przybliżony, bez opóźnienia fizycznego głośnika. Hałas i echo mogą go zaburzać.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Wariant</th>
+                <th>Odpowiedzi</th>
+                <th>p50</th>
+                <th>p95</th>
+                <th>Bez audio</th>
+                <th>Błędy połączeń</th>
+              </tr>
+            </thead>
+            <tbody id="summary"></tbody>
+          </table>
+        </div>
+        <p>
+          Statystyki łączą próby z tej karty. Porównuj jeden scenariusz i nie zmieniaj modeli między
+          próbami. Kilka pomiarów nie wystarcza do wniosku o p95. Każde połączenie LiveKit ma nową
+          historię modelu. Zapis rozmowy pozostaje w T3.
+        </p>
+        <div class="actions">
+          <button id="export" disabled>Pobierz wyniki JSON</button
+          ><button id="clear" disabled>Wyczyść wyniki</button>
+        </div>
+      </section>
+      <section aria-labelledby="transcript-title">
+        <h2 id="transcript-title">Bieżąca rozmowa</h2>
+        <div id="transcript" aria-live="polite">Zapis pojawi się po rozpoczęciu rozmowy.</div>
+      </section>
+      <details>
+        <summary>Zdarzenia i pomiary szczegółowe</summary>
+        <pre id="events">Brak zdarzeń.</pre>
+      </details>
+      <p>
+        Na telefonie ten panel mierzy rozmowę w przeglądarce. Nie zastępuje testu natywnego APK ani
+        pracy aplikacji w tle.
+      </p>
+    </main>
+  </body>
+</html>

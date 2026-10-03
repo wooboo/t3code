@@ -60,3 +60,7 @@ export * from "./worktreeMcp.ts";
 export * from "./resourceTelemetry.ts";
 export * from "./rpc.ts";
 export * from "./worktreeSetup.ts";
+export * from "./voiceInference.ts";
+export * from "./voiceAgentSettings.ts";
+
+export * from "./voiceCall.ts";

@@ -407,6 +407,9 @@ import {
 } from "../state/entities";
 import { environmentShell } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
+import { VoicePanel } from "./chat/VoiceFront";
+import { queuePendingVoiceStart, cancelPendingVoiceStart } from "./chat/pendingVoiceStart";
+import { useVoiceFront } from "./chat/useVoiceFront";
 import { createPageScrollController, type PageScrollKey } from "./chat/pageScrollController";
 import { isTimelineScrollTarget } from "./chat/timelineScrollTarget";
 import { DraftHeroHeadline } from "./chat/DraftHeroHeadline";
@@ -2094,6 +2097,10 @@ export default function ChatView(props: ChatViewProps) {
             title: parentSubagentThread?.title ?? "Parent thread",
           },
     [parentSubagentThread?.title, parentSubagentThreadRef],
+  );
+  const voice = useVoiceFront(
+    isServerThread && routeKind !== "draft" ? (activeThread?.id ?? null) : null,
+    environmentId,
   );
   const threadError = isServerThread
     ? (localServerError ?? serverRuntime?.lastError ?? null)
@@ -5130,6 +5137,10 @@ export default function ChatView(props: ChatViewProps) {
     );
     if (!sessionStillExists) usePreviewMiniPlayerStore.getState().close(activeThreadRef);
   }, [activePreviewMiniPlayer, activeThreadRef, deviceState.sessions, deviceStateLoaded]);
+  const addVoiceSurface = useCallback(() => {
+    if (!activeThreadRef || !isServerThread || !voice.enabled) return;
+    useRightPanelStore.getState().open(activeThreadRef, "voice");
+  }, [activeThreadRef, isServerThread, voice.enabled]);
   const openFileSurface = useCallback(
     (relativePath: string) => {
       if (!activeThreadRef || !activeProject) return;
@@ -8081,6 +8092,85 @@ export default function ChatView(props: ChatViewProps) {
       });
     }
   };
+  const draftVoiceGeneration = useRef(0);
+  useEffect(
+    () => () => {
+      draftVoiceGeneration.current++;
+    },
+    [routeThreadKey],
+  );
+  const startDraftVoice = async () => {
+    if (
+      !activeThread ||
+      !activeProject ||
+      isServerThread ||
+      sendInFlightRef.current ||
+      isConnecting
+    )
+      return;
+    const sendContext = composerRef.current?.getSendContext();
+    if (!sendContext?.providerAvailable) return;
+    const generation = draftVoiceGeneration.current;
+    if (sendEnvMode === "worktree" && !activeThread.worktreePath) {
+      setThreadError(
+        activeThread.id,
+        "Select Current checkout to start a voice conversation, or create the worktree first.",
+      );
+      return;
+    }
+    sendInFlightRef.current = true;
+    const output = new AudioContext();
+    void output.resume();
+    let stream: MediaStream | undefined;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      if (generation !== draftVoiceGeneration.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        void output.close();
+        return;
+      }
+      queuePendingVoiceStart(`${environmentId}:${activeThread.id}`, { stream, output });
+      const result = await createThread({
+        environmentId,
+        input: {
+          threadId: activeThread.id,
+          projectId: activeProject.id,
+          title: "Voice conversation",
+          modelSelection: sendContext.selectedModelSelection,
+          runtimeMode,
+          interactionMode,
+          branch: activeThreadBranch,
+          worktreePath: activeThread.worktreePath,
+          createdAt: activeThread.createdAt,
+        },
+      });
+      if (result._tag === "Failure") throw Error("Could not create the voice thread. Try again.");
+      const ref = scopeThreadRef(environmentId, activeThread.id);
+      useRightPanelStore.getState().open(ref, "voice");
+      markPromotedDraftThreadByRef(ref);
+      await navigate({
+        to: "/$environmentId/$threadId",
+        params: buildThreadRouteParams(ref),
+        replace: true,
+      });
+    } catch (error) {
+      cancelPendingVoiceStart(`${environmentId}:${activeThread.id}`);
+      stream?.getTracks().forEach((track) => track.stop());
+      if (output.state !== "closed") void output.close();
+      setThreadError(
+        activeThread.id,
+        error instanceof Error ? error.message : "Could not start voice conversation.",
+      );
+    } finally {
+      sendInFlightRef.current = false;
+    }
+  };
+  const composerVoice =
+    isLocalDraftThread && import.meta.env.DEV
+      ? { ...voice, enabled: Boolean(activeProject), start: startDraftVoice }
+      : voice;
 
   const onSend = async (
     e?: { preventDefault: () => void },
@@ -10257,7 +10347,15 @@ export default function ChatView(props: ChatViewProps) {
   }
 
   const rightPanelContent = activeThreadRef ? (
-    renderedRightPanelSurface?.kind === "preview" ? (
+    renderedRightPanelSurface?.kind === "voice" ? (
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <VoicePanel
+          voice={voice}
+          threadId={activeThread?.id ?? null}
+          environmentId={environmentId}
+        />
+      </div>
+    ) : renderedRightPanelSurface?.kind === "preview" ? (
       <Suspense fallback={null}>
         <PreviewPanel
           mode="embedded"
@@ -10861,6 +10959,8 @@ export default function ChatView(props: ChatViewProps) {
                                 true
                               }
                               onMultipleModelSelectionsChange={setMultipleModelSelections}
+                              voice={voice}
+                              onOpenVoicePanel={addVoiceSurface}
                               composerRef={composerRef}
                               composerDraftTarget={composerDraftTarget}
                               environmentId={environmentId}
@@ -11216,6 +11316,8 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequest={addPullRequestSurface}
           onAddPullRequests={addPullRequestsSurface}
           onAddDevice={addDeviceSurface}
+          onAddVoice={addVoiceSurface}
+          voiceAvailable={voice.enabled}
           browserAvailable={isPreviewSupportedInRuntime()}
           terminalAvailable={activeProject !== null}
           diffAvailable={isServerThread && isGitRepo}
@@ -11271,6 +11373,8 @@ export default function ChatView(props: ChatViewProps) {
             onAddPullRequest={addPullRequestSurface}
             onAddPullRequests={addPullRequestsSurface}
             onAddDevice={addDeviceSurface}
+            onAddVoice={addVoiceSurface}
+            voiceAvailable={voice.enabled}
             browserAvailable={isPreviewSupportedInRuntime()}
             terminalAvailable={activeProject !== null}
             diffAvailable={isServerThread && isGitRepo}

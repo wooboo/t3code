@@ -110,6 +110,9 @@ import {
 } from "../voice-input/ComposerDictationControl";
 import { useVoiceInputController } from "../voice-input/useVoiceInputController";
 import { resolveVoiceComposerPresentation } from "../voice-input/voiceInputPresentation";
+import { VoiceCallPanel } from "../voice-call/VoiceCallPanel";
+import { VoiceEnvironmentContext } from "../voice-call/VoiceEnvironmentContext";
+import type { VoiceCallHandle } from "../voice-call/useVoiceCall";
 import {
   rememberModelOptions,
   withRememberedModelOptions,
@@ -136,6 +139,7 @@ export const COMPOSER_COLLAPSED_CHROME = 60;
 export const COMPOSER_EXPANDED_CHROME = 156;
 
 export interface ThreadComposerProps {
+  readonly initialVoiceCallOpen?: boolean;
   readonly draftMessage: string;
   readonly draftAttachments: ReadonlyArray<DraftComposerAttachment>;
   readonly placeholder: string;
@@ -198,6 +202,7 @@ export interface ThreadComposerProps {
   readonly onExpandedChange?: (expanded: boolean) => void;
   /** Fires on editor focus/blur; hosts use it to vet stale keyboard state. */
   readonly onEditorFocusChange?: (focused: boolean) => void;
+  readonly voiceCall?: VoiceCallHandle;
 }
 
 /**
@@ -510,6 +515,12 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     onChangeDraftMessage: props.onChangeDraftMessage,
     onChangeSelection: composerMenu.onSelectionChange,
   });
+  const [voiceCallOpen, setVoiceCallOpen] = useState(props.initialVoiceCallOpen ?? false);
+  const voiceCallBlocksText =
+    props.voiceCall?.state.active === true && !props.voiceCall.state.muted;
+  useEffect(() => {
+    if (voiceCallBlocksText) inputRef.current?.blur();
+  }, [inputRef, voiceCallBlocksText]);
   const voicePresentation = resolveVoiceComposerPresentation(
     voiceInput.state,
     voiceInput.elapsedSeconds,
@@ -536,6 +547,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     hasContent &&
     !contextImports[composerDraftKey] &&
     !voiceInput.blocksSubmission &&
+    !voiceCallBlocksText &&
     sendBlockedReason === null &&
     !modelUnavailable;
 
@@ -588,7 +600,12 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
   }, [onEditorFocusChange, onExpandedChange, settingsSheetPresentation.keepsComposerExpanded]);
   const handleSend = useCallback(
     async (followUp?: ActiveTurnComposerAction) => {
-      if (voiceInput.blocksSubmission || pendingPastedTextAttachmentCountRef.current > 0) return;
+      if (
+        voiceCallBlocksText ||
+        voiceInput.blocksSubmission ||
+        pendingPastedTextAttachmentCountRef.current > 0
+      )
+        return;
       // Typed out in full rather than picked from the menu. Attachments mean the
       // user is sending a prompt, so those go through as usual.
       if (
@@ -632,6 +649,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
       props.selectedThread.id,
       props.selectedThread.title,
       voiceInput.blocksSubmission,
+      voiceCallBlocksText,
     ],
   );
 
@@ -803,6 +821,13 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
           </Pressable>
         ) : null}
 
+        {props.voiceCall ? (
+          <VoiceEnvironmentContext
+            environmentId={props.voiceCall.environmentId}
+            hostEnvironmentId={props.voiceCall.hostEnvironmentId}
+            compact
+          />
+        ) : null}
         <ComposerSurface
           style={
             isExpanded
@@ -899,7 +924,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                 ref={inputRef}
                 multiline
                 value={props.draftMessage}
-                readOnly={voiceInput.freezesEditor}
+                readOnly={voiceInput.freezesEditor || voiceCallBlocksText}
                 skills={composerMenu.skills}
                 selection={composerMenu.selection}
                 onChangeText={props.onChangeDraftMessage}
@@ -1039,10 +1064,24 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             ) : null}
             {!isExpanded ? (
               <View className="flex-row items-center">
+                {props.voiceCall && Platform.OS === "android" ? (
+                  <ComposerActionButton
+                    accessibilityLabel={
+                      props.voiceCall.state.active
+                        ? "Rozmowa głosowa aktywna — otwórz panel"
+                        : "Otwórz panel głosu"
+                    }
+                    icon={props.voiceCall.state.muted ? "mic.slash" : "mic"}
+                    variant={props.voiceCall.state.active ? "danger" : "primary"}
+                    onPress={() => setVoiceCallOpen(true)}
+                  />
+                ) : null}
                 <ComposerDictationStartAction
                   state={voiceInput.state}
                   isAvailable={voiceInput.isAvailable}
-                  onStart={voiceInput.start}
+                  onStart={() => {
+                    if (!props.voiceCall?.state.active) void voiceInput.start();
+                  }}
                   onCancel={voiceInput.cancel}
                 />
                 {showStopAction ? (
@@ -1131,10 +1170,23 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                   </View>
                 )}
                 <View className="shrink-0 flex-row items-center">
+                  {props.voiceCall && Platform.OS === "android" ? (
+                    <ComposerActionButton
+                      accessibilityLabel={
+                        props.voiceCall.state.active
+                          ? `Rozmowa głosowa aktywna: ${props.voiceCall.state.muted ? "mikrofon wyciszony" : props.voiceCall.state.status}`
+                          : "Otwórz panel głosu"
+                      }
+                      icon={props.voiceCall.state.muted ? "mic.slash" : "mic"}
+                      variant={props.voiceCall.state.active ? "danger" : "primary"}
+                      onPress={() => setVoiceCallOpen((open) => !open)}
+                    />
+                  ) : null}
                   <ComposerDictationPrimaryAction
                     state={voiceInput.state}
                     presentation={voicePresentation}
                     isAvailable={voiceInput.isAvailable}
+                    disabled={props.voiceCall?.state.active === true}
                     onStart={voiceInput.start}
                     onConfirm={voiceInput.stop}
                     onCancel={voiceInput.cancel}
@@ -1159,6 +1211,13 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             </ComposerDictationToolbar>
           </Animated.View>
         </ComposerSurface>
+        {props.voiceCall && voiceCallOpen ? (
+          <VoiceCallPanel
+            call={props.voiceCall}
+            canStart={!voiceInput.isBusy}
+            onClose={() => setVoiceCallOpen(false)}
+          />
+        ) : null}
       </Animated.View>
 
       <VideoPreviewModal source={previewVideo} onRequestClose={closePreview} />

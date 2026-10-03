@@ -18,3 +18,8 @@ export {
   type VoiceTranscriptionErrorCode,
   type VoiceTranscriptionOptions,
 } from "./transcription.ts";
+export {
+  groupVoiceTranscript,
+  applyTermReplacements,
+  type VoiceTermReplacement,
+} from "../voiceTranscript.ts";

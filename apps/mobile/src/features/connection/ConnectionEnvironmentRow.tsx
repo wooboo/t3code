@@ -104,6 +104,13 @@ export function ConnectionEnvironmentRow(props: {
             >
               {props.environment.environmentLabel}
             </Text>
+            {serverConfig?.environment.capabilities.voice ? (
+              <Text className="text-xs text-foreground-secondary">
+                {serverConfig.environment.capabilities.voiceCallbacks
+                  ? "Full voice server"
+                  : "Voice server"}
+              </Text>
+            ) : null}
           </View>
           {!props.environment.isRelayManaged && props.environment.displayUrl.trim() ? (
             <Text className="text-xs text-foreground-muted" numberOfLines={1}>

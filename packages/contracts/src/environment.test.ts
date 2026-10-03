@@ -24,6 +24,19 @@ describe("ExecutionEnvironmentDescriptor", () => {
     ).toBe(true);
   });
 
+  it("preserves voice support and accepts older environments without it", () => {
+    expect(decodeDescriptor(descriptor).capabilities.voice).toBeUndefined();
+    expect(decodeDescriptor(descriptor).capabilities.voiceCallbacks).toBeUndefined();
+    for (const voice of [true, false]) {
+      expect(decodeDescriptor({ ...descriptor, capabilities: { voice } }).capabilities.voice).toBe(
+        voice,
+      );
+      expect(
+        decodeDescriptor({ ...descriptor, capabilities: { voiceCallbacks: voice } }).capabilities
+          .voiceCallbacks,
+      ).toBe(voice);
+    }
+  });
   it("treats a missing pull-request capability as unsupported under version skew", () => {
     expect(decodeDescriptor(descriptor).capabilities.pullRequests).toBeUndefined();
   });

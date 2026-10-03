@@ -250,7 +250,7 @@ export default defineConfig(() => {
                 {
                   target: devProxyTarget,
                   changeOrigin: true,
-                  ...(prefix === "/ws" || prefix === "/api" ? { ws: true } : {}),
+                  ...(["/ws", "/api", "/voice"].includes(prefix) ? { ws: true } : {}),
                 },
               ]),
             ),

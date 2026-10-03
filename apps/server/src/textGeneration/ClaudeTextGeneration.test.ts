@@ -260,6 +260,29 @@ function withFakeClaudeEnv<A, E, R>(
 }
 
 it.layer(ClaudeTextGenerationTestLayer)("ClaudeTextGeneration", (it) => {
+  it.effect("voice inference disables native tools and does not bypass permissions", () =>
+    withFakeClaudeEnv(
+      {
+        output: JSON.stringify({ structured_output: { text: "Cześć", toolCalls: [] } }),
+        argsMustContain: "--tools  --disable-slash-commands --strict-mcp-config",
+        argsMustNotContain: "--dangerously-skip-permissions",
+        stdinMustContain: "not the coding executor",
+      },
+      (service) =>
+        Effect.gen(function* () {
+          const result = yield* service.generateVoiceResponse!({
+            cwd: process.cwd(),
+            modelSelection: createModelSelection(
+              ProviderInstanceId.make("claudeAgent"),
+              SYNTHETIC_CLAUDE_STANDARD_MODEL,
+            ),
+            prompt: "Hello",
+          });
+          expect(result).toEqual({ text: "Cześć", toolCalls: [] });
+        }),
+    ),
+  );
+
   it.effect("forwards Claude thinking settings without passing unsupported effort", () =>
     withFakeClaudeEnv(
       {

@@ -22,6 +22,8 @@ import * as ServerConfig from "../config.ts";
 import { expandHomePath } from "../pathExpansion.ts";
 import { codexExecLaunchArgs, resolveCodexLaunchArgs } from "../provider/Layers/codexLaunchArgs.ts";
 import * as TextGeneration from "./TextGeneration.ts";
+import { buildVoiceResponsePrompt, CODEX_VOICE_ARGS } from "./VoiceTextGeneration.ts";
+import { streamCodexVoice } from "./CodexVoiceStream.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
@@ -121,7 +123,8 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle",
+      | "generateThreadTitle"
+      | "generateVoiceResponse",
     value: unknown,
   ): Effect.Effect<string, TextGenerationError> =>
     encodeJsonString(value).pipe(
@@ -182,7 +185,8 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateVoiceResponse";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -231,6 +235,7 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
           "--skip-git-repo-check",
           "-s",
           "read-only",
+          ...(operation === "generateVoiceResponse" ? CODEX_VOICE_ARGS : []),
           "--model",
           model,
           "--config",
@@ -454,6 +459,17 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
     });
 
   return {
+    streamVoiceResponse: (input) =>
+      streamCodexVoice(input, codexConfig, resolvedEnvironment, commandSpawner),
+    generateVoiceResponse: (input) => {
+      const { prompt, outputSchema } = buildVoiceResponsePrompt(input.prompt);
+      return runCodexJson({
+        ...input,
+        prompt,
+        outputSchemaJson: outputSchema,
+        operation: "generateVoiceResponse",
+      });
+    },
     generateCommitMessage,
     generatePrContent,
     generateBranchName,

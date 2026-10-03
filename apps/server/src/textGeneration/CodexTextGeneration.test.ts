@@ -191,6 +191,32 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
           }),
       ),
   );
+  it.effect("returns coordinator tool requests as data with native shell disabled", () =>
+    withFakeCodexEnv(
+      {
+        output: JSON.stringify({
+          text: "Sprawdzę to.",
+          toolCalls: [{ name: "delegate", arguments: '{"task":"check tests"}' }],
+        }),
+        requireArg: "features.shell_tool=false",
+        forbidArg: "--dangerously-bypass-approvals-and-sandbox",
+        stdinMustContain: "do not execute them",
+      },
+      (service) =>
+        Effect.gen(function* () {
+          const result = yield* service.generateVoiceResponse!({
+            cwd: process.cwd(),
+            modelSelection: DEFAULT_TEST_MODEL_SELECTION,
+            prompt: "Proszę sprawdzić testy.",
+          });
+          expect(result.toolCalls).toEqual([
+            { name: "delegate", arguments: '{"task":"check tests"}' },
+          ]);
+          expect(result.text).toBe("Sprawdzę to.");
+        }),
+    ),
+  );
+
   it.effect("generates and sanitizes commit messages without branch by default", () =>
     withFakeCodexEnv(
       {
@@ -296,7 +322,10 @@ it.layer(CodexTextGenerationTestLayer)("CodexTextGeneration", (it) => {
           body: "",
         }),
         launchArgs: "--enable settings-feature",
-        environment: { ...process.env, T3CODE_CODEX_LAUNCH_ARGS: " --strict-config --listen off " },
+        environment: {
+          PATH: process.env.PATH,
+          T3CODE_CODEX_LAUNCH_ARGS: " --strict-config --listen off ",
+        },
         requireArg: "--strict-config",
         forbidArg: "settings-feature",
       },

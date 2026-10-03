@@ -295,6 +295,11 @@ export function NewTaskEnvironmentPickerRouteScreen() {
                 }}
                 selected={flow.selectedEnvironmentId === environment.environmentId}
                 title={environment.environmentLabel}
+                subtitle={
+                  serverConfigs.get(environment.environmentId)?.environment.capabilities.voice
+                    ? "Voice"
+                    : undefined
+                }
               />
             ))}
           </PickerSurface>

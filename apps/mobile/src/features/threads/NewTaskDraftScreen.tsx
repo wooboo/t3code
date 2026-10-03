@@ -1,3 +1,10 @@
+import { useServerConfigs } from "../../state/entities";
+import { useVoiceHost } from "../voice-call/useVoiceHost";
+import { useCreateProjectThread } from "./use-project-actions";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import { useAtomValue } from "@effect/atom-react";
 import * as Cause from "effect/Cause";
 import { AsyncResult } from "effect/unstable/reactivity";
@@ -192,6 +199,7 @@ export function NewTaskDraftScreen(props: {
 }) {
   const projects = useProjects();
   const flow = useNewTaskFlow();
+  const createProjectThread = useCreateProjectThread();
   const navigation = useNavigation();
   const {
     consumeShare,
@@ -1180,7 +1188,10 @@ export function NewTaskDraftScreen(props: {
     [composerMenu, flow, selectedEnvironmentServerConfig],
   );
 
-  async function handleStart(): Promise<void> {
+  const voiceHost = useVoiceHost();
+  const voiceServerConfigs = useServerConfigs();
+
+  async function handleStart(openVoice = false): Promise<void> {
     if (voiceInput.blocksSubmission || pendingPastedTextAttachmentCountRef.current > 0) return;
     const selectedProject = flow.selectedProject;
     const draftKey = flow.draftKey;
@@ -1199,11 +1210,35 @@ export function NewTaskDraftScreen(props: {
     const workspaceMode = draft.workspaceSelection?.mode ?? flow.workspaceMode;
     const selectedBranchName = draft.workspaceSelection?.branch ?? flow.selectedBranchName;
     const initialMessageText = draft.text.trim();
+    const createOnly = openVoice && initialMessageText.length === 0;
+
+    if (
+      openVoice &&
+      voiceServerConfigs.get(voiceHost.environmentId ?? selectedProject.environmentId)?.environment
+        .capabilities.voice === false
+    ) {
+      Alert.alert(
+        "Rozmowa głosowa",
+        "To środowisko nie obsługuje voice. Wybierz serwer oznaczony Voice w Ustawienia → Voice.",
+      );
+      return;
+    }
+    if (openVoice && !environmentConnected) {
+      Alert.alert("Rozmowa głosowa", "Połącz się z serwerem przed rozpoczęciem rozmowy.");
+      return;
+    }
+    if (createOnly && workspaceMode === "worktree") {
+      Alert.alert(
+        "Rozmowa głosowa",
+        "Aby rozpocząć głosem, wybierz istniejący katalog pracy. Nowy worktree wymaga pierwszej wiadomości tekstowej.",
+      );
+      return;
+    }
 
     if (
       attachmentBlockReason !== null ||
       !modelSelection ||
-      initialMessageText.length === 0 ||
+      (!openVoice && initialMessageText.length === 0) ||
       flow.submitting ||
       (workspaceMode === "worktree" && !selectedBranchName)
     ) {
@@ -1247,6 +1282,55 @@ export function NewTaskDraftScreen(props: {
     const contextBlockReason = composerContextSendBlockReason(draft.context);
     if (contextBlockReason) {
       Alert.alert("Too much context", contextBlockReason);
+      return;
+    }
+
+    if (createOnly) {
+      flow.setSubmitting(true);
+      try {
+        const result = await createProjectThread({
+          project: selectedProject,
+          modelSelection,
+          envMode: workspaceMode,
+          branch: resolveProjectThreadCreationBranch({
+            workspaceMode,
+            selectedBranch: selectedBranchName,
+            currentCheckoutBranch: flow.currentCheckoutBranchName,
+          }),
+          worktreePath: draft.workspaceSelection?.worktreePath ?? flow.selectedWorktreePath,
+          runtimeMode: draft.runtimeMode ?? flow.runtimeMode,
+          interactionMode: flow.planModeEnabled
+            ? (draft.interactionMode ?? flow.interactionMode)
+            : "default",
+          initialMessageText,
+          createOnly: true,
+          initialAttachments: draft.attachments,
+          onAttachmentsUploaded: async () => {},
+        });
+        if (result._tag === "Failure") {
+          if (!isAtomCommandInterrupted(result)) {
+            const error = squashAtomCommandFailure(result);
+            Alert.alert(
+              "Could not start task",
+              error instanceof Error ? error.message : "The task could not be started.",
+            );
+          }
+          return;
+        }
+        clearComposerDraftContent(draftKey, {
+          clearModelSelection: true,
+          clearWorkspaceSelection: true,
+        });
+        setSubmitNavigationAction(
+          StackActions.replace("Thread", {
+            environmentId: String(result.value.environmentId),
+            threadId: String(result.value.threadId),
+            openVoice: true,
+          }),
+        );
+      } finally {
+        flow.setSubmitting(false);
+      }
       return;
     }
 
@@ -1323,6 +1407,7 @@ export function NewTaskDraftScreen(props: {
         : StackActions.replace("Thread", {
             environmentId: String(message.environmentId),
             threadId: String(message.threadId),
+            ...(openVoice ? { openVoice: true } : {}),
           }),
     );
     scheduleUnusedComposerAttachmentCleanup(draftSnapshot.attachments);
@@ -1755,6 +1840,20 @@ export function NewTaskDraftScreen(props: {
                   </View>
                 </>
               )}
+              {isAndroid ? (
+                <ComposerActionButton
+                  accessibilityLabel="Rozpocznij czat głosowy"
+                  icon="mic"
+                  variant="primary"
+                  disabled={
+                    isComposerInteractionLocked ||
+                    voiceInput.isBusy ||
+                    modelUnavailable ||
+                    !environmentConnected
+                  }
+                  onPress={() => void handleStart(true)}
+                />
+              ) : null}
               <ComposerDictationPrimaryAction
                 state={voiceInput.state}
                 presentation={voicePresentation}

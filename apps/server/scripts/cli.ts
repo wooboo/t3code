@@ -90,6 +90,17 @@ const buildCmd = Command.make(
         }),
       );
 
+      yield* fs.copy(
+        path.join(repoRoot, "packages/voice-gateway/config/frontend-agent"),
+        path.join(serverDir, "dist/voice-config"),
+      );
+      for (const notice of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]) {
+        yield* fs.copyFile(
+          path.join(repoRoot, "packages/voice-gateway", notice),
+          path.join(serverDir, "dist/voice-bundle", notice),
+        );
+      }
+
       const webDist = path.join(repoRoot, "apps/web/dist");
       const clientTarget = path.join(serverDir, "dist/client");
 

@@ -9,6 +9,7 @@ packages:
 # true = allowed to run build scripts; false mirrors the pnpm 10 behavior
 # where anything outside onlyBuiltDependencies was silently not built.
 allowBuilds:
+  "@livekit/local-inference": true
   browser-tabs-lock: false
   bufferutil: false
   core-js: false
@@ -18,6 +19,7 @@ allowBuilds:
   msgpackr-extract: true
   msw: false
   node-pty: true
+  onnxruntime-node: true
   sharp: true
   utf-8-validate: false
   workerd: false
@@ -264,6 +266,7 @@ patchedDependencies:
   react-native-nitro-modules@0.35.9: patches/react-native-nitro-modules@0.35.9.patch
   react-native-screens@4.28.0: patches/react-native-screens@4.28.0.patch
   uniwind@1.11.0: patches/uniwind@1.11.0.patch
+  react-native-shiki-engine@0.3.12: patches/react-native-shiki-engine.patch
 
 peerDependencyRules:
   allowAny:

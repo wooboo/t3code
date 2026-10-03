@@ -21,6 +21,7 @@ import {
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
 import * as TextGeneration from "./TextGeneration.ts";
+import { buildVoiceResponsePrompt } from "./VoiceTextGeneration.ts";
 import {
   sanitizeCommitSubject,
   sanitizePrTitle,
@@ -34,6 +35,7 @@ const OpenCodeTextGenerationOperation = Schema.Literals([
   "generatePrContent",
   "generateBranchName",
   "generateThreadTitle",
+  "generateVoiceResponse",
 ]);
 
 type OpenCodeTextGenerationOperation = typeof OpenCodeTextGenerationOperation.Type;
@@ -230,6 +232,24 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
             cwd: input.cwd,
           });
         }
+        if (input.operation === "generateVoiceResponse") {
+          const sessionID = session.data.id;
+          // A short-lived helper must not leave a new native conversation for every utterance.
+          yield* Effect.addFinalizer(() =>
+            Effect.tryPromise({
+              try: async () => {
+                await client.session.abort({ sessionID }).catch(() => undefined);
+                await client.session.delete({ sessionID });
+              },
+              catch: (cause) =>
+                new OpenCodeTextGenerationSessionRequestError({
+                  operation: input.operation,
+                  cwd: input.cwd,
+                  cause,
+                }),
+            }).pipe(Effect.timeoutOption(5_000), Effect.ignore),
+          );
+        }
         const selectedAgent = getModelSelectionStringOptionValue(input.modelSelection, "agent");
         const selectedVariant = getModelSelectionStringOptionValue(input.modelSelection, "variant");
         const promptContext = {
@@ -274,6 +294,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
         }
         return rawText;
       },
+      Effect.scoped,
       Effect.catchTags({
         OpenCodeTextGenerationSessionRequestError: (cause) =>
           Effect.fail(
@@ -472,6 +493,15 @@ export function makeOpenCodeOperations(
     });
 
   return {
+    generateVoiceResponse: (input) => {
+      const { prompt, outputSchema } = buildVoiceResponsePrompt(input.prompt);
+      return runOpenCodeJson({
+        ...input,
+        prompt,
+        outputSchemaJson: outputSchema,
+        operation: "generateVoiceResponse",
+      });
+    },
     generateCommitMessage,
     generatePrContent,
     generateBranchName,

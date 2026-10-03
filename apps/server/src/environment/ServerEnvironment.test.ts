@@ -150,6 +150,26 @@ it.layer(NodeServices.layer)("ServerEnvironmentLive", (it) => {
     }),
   );
 
+  it.effect.each(["1", "0"])("advertises voice configuration %s", (enabled) =>
+    Effect.gen(function* () {
+      const previous = process.env.T3_VOICE_ENABLED;
+      process.env.T3_VOICE_ENABLED = enabled;
+      try {
+        const fs = yield* FileSystem.FileSystem;
+        const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-voice-capability-" });
+        const descriptor = yield* Effect.gen(function* () {
+          const service = yield* ServerEnvironment.ServerEnvironment;
+          return yield* service.getDescriptor;
+        }).pipe(Effect.provide(makeServerEnvironmentLayer(baseDir)));
+        expect(descriptor.capabilities.voice).toBe(enabled === "1");
+        expect(descriptor.capabilities.voiceCallbacks).toBe(enabled === "1");
+      } finally {
+        if (previous === undefined) delete process.env.T3_VOICE_ENABLED;
+        else process.env.T3_VOICE_ENABLED = previous;
+      }
+    }),
+  );
+
   it.effect("persists the environment id across service restarts", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
