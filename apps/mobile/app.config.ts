@@ -429,7 +429,12 @@ const config: ExpoConfig = {
           minSdkVersion: 24,
           // kotlinx-io uses Kotlin 2.3's return-value checker annotation, while
           // SDK 58 builds with Kotlin 2.2. It has no runtime behavior.
-          extraProguardRules: "-dontwarn kotlin.MustUseReturnValues",
+          extraProguardRules: [
+            "-dontwarn kotlin.MustUseReturnValues",
+            // WebRTC loads its relocated JNI bootstrap classes from native code.
+            // LiveKit's consumer rules only preserve the unprefixed org.jni_zero.
+            "-keep class livekit.org.jni_zero.** { *; }",
+          ].join("\n"),
         },
         ios: {
           deploymentTarget: "18.0",
