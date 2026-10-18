@@ -11,7 +11,7 @@ import {
 } from "@t3tools/contracts";
 import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 import * as Cause from "effect/Cause";
-import { AsyncResult } from "effect/unstable/reactivity";
+import { AsyncResult } from "effect/reactivity";
 
 import { threadEnvironment } from "../../state/threads";
 import type { DraftComposerAttachment } from "../../lib/composerImages";
@@ -131,7 +131,7 @@ export function useCreateProjectThread() {
       );
       const providerError = !serverConfig
         ? "Provider settings are still loading. Try again."
-        : isModelSelectionUnavailable(serverConfig, input.modelSelection)
+        : isModelSelectionUnavailable(serverConfig, input.modelSelection, input.project.id)
           ? "Antigravity model unavailable. Set it up on web or desktop, or choose another model."
           : null;
       if (providerError !== null) {

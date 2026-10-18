@@ -15,19 +15,19 @@ import {
   HttpRouter,
   HttpServer,
   HttpServerResponse,
-} from "effect/unstable/http";
+} from "effect/http";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import * as ServerSecretStore from "./auth/ServerSecretStore.ts";
 import * as SessionStore from "./auth/SessionStore.ts";
 import * as ServerConfig from "./config.ts";
 import * as ServerEnvironment from "./environment/ServerEnvironment.ts";
-import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite.ts";
+import { layerMemory as SqlitePersistenceMemory } from "./persistence/Sqlite.ts";
 import { voiceGatewayRouteLayer } from "./voiceGatewayHttp.ts";
 
 const dependencies = EnvironmentAuth.layer.pipe(
   Layer.provide(SqlitePersistenceMemory),
   Layer.provide(ServerSecretStore.layer),
-  Layer.provide(ServerEnvironment.identityLayer),
+  Layer.provide(ServerEnvironment.layerIdentity),
   Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "t3-voice-http-" })),
   Layer.provideMerge(NodeServices.layer),
   Layer.provideMerge(NodeHttpServer.layerTest),
@@ -75,9 +75,7 @@ it.effect("T3 owns voice HTTP, socket authentication, credential renewal and shu
     );
     yield* Layer.build(
       HttpRouter.serve(
-        Layer.mergeAll(fakeT3, voiceGatewayRouteLayer).pipe(
-          Layer.provideMerge(FetchHttpClient.layer),
-        ),
+        Layer.mergeAll(fakeT3, voiceGatewayRouteLayer.pipe(Layer.provide(FetchHttpClient.layer))),
         { disableLogger: true },
       ),
     );

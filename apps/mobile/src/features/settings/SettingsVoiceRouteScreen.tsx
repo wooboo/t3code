@@ -4,8 +4,8 @@ import { useVoiceHost } from "../voice-call/useVoiceHost";
 import * as Option from "effect/Option";
 import { useEffect, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ControlPillMenu } from "../../components/ControlPill";
-import { SymbolView } from "../../components/AppSymbol";
+import { Menu as ControlPillMenu } from "../../components/ui/Menu";
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { Platform, Pressable, ScrollView, Switch, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type {
@@ -15,8 +15,8 @@ import type {
   ModelSelection,
   ServerProvider,
 } from "@t3tools/contracts";
-import { AppText as Text, AppTextInput as TextInput } from "../../components/AppText";
-import { AndroidScreenHeader } from "../../components/AndroidScreenHeader";
+import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
+import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader";
 import { NativeStackScreenOptions } from "../../native/StackHeader";
 import { useEnvironments } from "../../state/environments";
 import { usePreparedConnection } from "../../state/session";

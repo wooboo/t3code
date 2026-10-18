@@ -1,8 +1,8 @@
 import { memo, useState } from "react";
 import { Platform, Pressable, View } from "react-native";
 import type { EnvironmentId } from "@t3tools/contracts";
-import { AppText as Text } from "../../components/AppText";
-import { SymbolView } from "../../components/AppSymbol";
+import { AppText as Text } from "../../components/ui/AppText";
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { useEnvironments } from "../../state/environments";
 import { useServerConfigs } from "../../state/entities";
 import { voiceSupport } from "./voiceSupport";

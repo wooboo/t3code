@@ -4,7 +4,7 @@ import { useFocusEffect, useNavigation, type StaticScreenProps } from "@react-na
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { EnvironmentId, VoiceCallInvitation } from "@t3tools/contracts";
-import { AppText as Text } from "../../components/AppText";
+import { AppText as Text } from "../../components/ui/AppText";
 import { usePreparedConnection } from "../../state/session";
 import { useVoiceCall } from "./useVoiceCall";
 import { VoiceCallPanel } from "./VoiceCallPanel";

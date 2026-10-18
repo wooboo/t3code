@@ -1,13 +1,13 @@
 import * as Context from "effect/Context";
 import type * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
-import * as HttpApi from "effect/unstable/httpapi/HttpApi";
-import * as HttpApiEndpoint from "effect/unstable/httpapi/HttpApiEndpoint";
-import * as HttpApiGroup from "effect/unstable/httpapi/HttpApiGroup";
-import * as HttpApiMiddleware from "effect/unstable/httpapi/HttpApiMiddleware";
-import * as HttpApiSchema from "effect/unstable/httpapi/HttpApiSchema";
-import * as HttpServerRespondable from "effect/unstable/http/HttpServerRespondable";
-import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
+import * as HttpApi from "effect/http-api/HttpApi";
+import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
+import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
+import * as HttpApiMiddleware from "effect/http-api/HttpApiMiddleware";
+import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
+import * as HttpServerRespondable from "effect/http/HttpServerRespondable";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import {
   VoiceInferenceCatalogue,
   VoiceInferenceEvent,
@@ -22,6 +22,19 @@ import {
   AuthBrowserSessionResult,
   AuthClientSession,
   AuthCreatePairingCredentialInput,
+  AuthMcpApprovalDecisionRequest,
+  AuthMcpApprovalDetails,
+  AuthMcpApprovalError,
+  AuthMcpApprovalRedirect,
+  AuthMcpAuthorizationRequest,
+  AuthMcpAuthorizationServerMetadata,
+  AuthMcpClientRegistration,
+  AuthMcpProtectedResourceMetadata,
+  AuthMcpRegisteredClient,
+  AuthMcpRegistrationError,
+  AuthMcpTokenError,
+  AuthMcpTokenRequest,
+  AuthMcpTokenResult,
   AuthPairingCredentialResult,
   AuthPairingLink,
   AuthRevokeClientSessionInput,
@@ -48,6 +61,7 @@ import {
   OrchestrationV2ThreadBoundedSnapshot,
   OrchestrationV2ThreadDetailSnapshot,
   OrchestrationV2ThreadHistoryPage,
+  OrchestrationV2ThreadTranscript,
 } from "./orchestrationV2.ts";
 import { Project, ProjectMutation, ProjectSnapshot } from "./project.ts";
 import {
@@ -86,6 +100,7 @@ export const EnvironmentRequestInvalidReason = Schema.Literals([
   "scope_not_granted",
   "invalid_command",
   "invalid_history_cursor",
+  "thread_transcript_too_large",
 ]);
 export type EnvironmentRequestInvalidReason = typeof EnvironmentRequestInvalidReason.Type;
 
@@ -144,7 +159,6 @@ export class EnvironmentAuthInvalidError extends Schema.TaggedError<EnvironmentA
   {
     code: Schema.Literal("auth_invalid"),
     reason: EnvironmentAuthInvalidReason,
-    // Older servers do not send a DPoP failure category.
     dpopFailureReason: Schema.optionalKey(DpopFailureReason),
     traceId: TrimmedNonEmptyString,
   },
@@ -164,6 +178,7 @@ export class EnvironmentScopeRequiredError extends Schema.TaggedError<Environmen
   {
     code: Schema.Literal("insufficient_scope"),
     requiredScope: AuthEnvironmentScope,
+    requiredPermission: Schema.optionalKey(Schema.String),
     traceId: TrimmedNonEmptyString,
   },
   { httpApiStatus: 403 },
@@ -173,7 +188,7 @@ export class EnvironmentScopeRequiredError extends Schema.TaggedError<Environmen
   }
 
   override get message(): string {
-    return `This request needs the ${this.requiredScope} scope, which this client does not have.`;
+    return `This request needs the ${this.requiredPermission ?? this.requiredScope} scope, which this client does not have.`;
   }
 }
 
@@ -405,17 +420,16 @@ export const EnvironmentCloudLinkStateResult = Schema.Struct({
   cloudUserId: Schema.NullOr(Schema.String),
   relayUrl: Schema.NullOr(Schema.String),
   relayIssuer: Schema.NullOr(Schema.String),
-  // A managed Cloudflare tunnel is provisioned for this link. False for a
-  // publish-only link (activity publishing without a relay-managed tunnel), so
-  // clients can present the two capabilities as independent settings.
-  // Optional so newer clients tolerate older environment servers.
   managedTunnelActive: Schema.optional(Schema.Boolean),
   publishAgentActivity: Schema.Boolean,
+  holdWebhooksWhileOffline: Schema.optional(Schema.Boolean),
+  linkRevoked: Schema.optional(Schema.Boolean),
 });
 export type EnvironmentCloudLinkStateResult = typeof EnvironmentCloudLinkStateResult.Type;
 
 export const EnvironmentCloudPreferencesRequest = Schema.Struct({
   publishAgentActivity: Schema.Boolean,
+  holdWebhooksWhileOffline: Schema.optional(Schema.Boolean),
 });
 export type EnvironmentCloudPreferencesRequest = typeof EnvironmentCloudPreferencesRequest.Type;
 
@@ -516,12 +530,64 @@ class EnvironmentAuthHttpApi extends HttpApiGroup.make("auth")
     }).middleware(EnvironmentAuthenticatedAuth),
   ) {}
 
+class EnvironmentMcpOAuthHttpApi extends HttpApiGroup.make("mcpOAuth")
+  .add(
+    HttpApiEndpoint.get("protectedResource", "/.well-known/oauth-protected-resource", {
+      success: AuthMcpProtectedResourceMetadata,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("mcpProtectedResource", "/.well-known/oauth-protected-resource/mcp", {
+      success: AuthMcpProtectedResourceMetadata,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.get("authorizationServer", "/.well-known/oauth-authorization-server", {
+      success: AuthMcpAuthorizationServerMetadata,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("register", "/oauth/mcp/register", {
+      payload: AuthMcpClientRegistration,
+      success: AuthMcpRegisteredClient,
+      error: AuthMcpRegistrationError,
+    }),
+  )
+  .add(HttpApiEndpoint.get("authorize", "/oauth/mcp/authorize"))
+  .add(
+    HttpApiEndpoint.post("approval", "/oauth/mcp/approval", {
+      payload: AuthMcpAuthorizationRequest,
+      success: [AuthMcpApprovalDetails, AuthMcpApprovalRedirect],
+      error: AuthMcpApprovalError,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("decision", "/oauth/mcp/decision", {
+      payload: AuthMcpApprovalDecisionRequest,
+      success: AuthMcpApprovalRedirect,
+      error: AuthMcpApprovalError,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("token", "/oauth/mcp/token", {
+      payload: AuthMcpTokenRequest,
+      success: AuthMcpTokenResult,
+      error: AuthMcpTokenError,
+    }),
+  ) {}
+
 const EnvironmentOrchestrationThreadSnapshotParams = Schema.Struct({
   threadId: ThreadId,
 });
 
+const EnvironmentOrchestrationThreadBoundedSnapshotQuery = Schema.Struct({
+  compactTurnItems: Schema.optionalKey(Schema.String),
+});
+
 const EnvironmentOrchestrationThreadHistoryQuery = Schema.Struct({
   cursor: TrimmedNonEmptyString,
+  throughEntryId: Schema.optional(TrimmedNonEmptyString),
+  view: Schema.optional(Schema.Literals(["conversation", "activity"])),
 });
 
 const EnvironmentOrchestrationThreadHistoryErrors = [
@@ -548,9 +614,18 @@ class EnvironmentOrchestrationHttpApi extends HttpApiGroup.make("orchestration")
     }).middleware(EnvironmentAuthenticatedAuth),
   )
   .add(
+    HttpApiEndpoint.get("threadTranscript", "/api/orchestration/threads/:threadId/transcript", {
+      headers: OrchestrationProtocolHeaders,
+      params: EnvironmentOrchestrationThreadSnapshotParams,
+      success: OrchestrationV2ThreadTranscript,
+      error: [EnvironmentRequestInvalidError, ...EnvironmentOrchestrationThreadSnapshotErrors],
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
     HttpApiEndpoint.get("threadBoundedSnapshot", "/api/orchestration/threads/:threadId/bounded", {
       headers: OrchestrationProtocolHeaders,
       params: EnvironmentOrchestrationThreadSnapshotParams,
+      query: EnvironmentOrchestrationThreadBoundedSnapshotQuery,
       success: OrchestrationV2ThreadBoundedSnapshot,
       error: EnvironmentOrchestrationThreadSnapshotErrors,
     }).middleware(EnvironmentAuthenticatedAuth),
@@ -582,7 +657,6 @@ class EnvironmentProjectsHttpApi extends HttpApiGroup.make("projects")
     }).middleware(EnvironmentAuthenticatedAuth),
   ) {}
 
-/** Large, compressible pull-request payloads travel over HTTP rather than the RPC socket. */
 class EnvironmentPullRequestsHttpApi extends HttpApiGroup.make("pullRequests").add(
   HttpApiEndpoint.post("diff", "/api/pull-requests/diff", {
     headers: OptionalBearerHeaders,
@@ -693,12 +767,37 @@ export class EnvironmentVoiceHttpApi extends HttpApiGroup.make("voice")
       error: [EnvironmentAuthInvalidError, EnvironmentScopeRequiredError, EnvironmentInternalError],
     }).middleware(EnvironmentAuthenticatedAuth),
   ) {}
+/**
+ * Public entry point for webhook tasks. Unauthenticated by design: the token
+ * in the path, and an optional body signature, are the credential. The handler
+ * reads the raw body itself so a signature is checked over the exact bytes.
+ */
+const WebhookParams = Schema.Struct({
+  hookId: TrimmedNonEmptyString,
+  token: TrimmedNonEmptyString,
+});
+const WebhookAccepted = Schema.Struct({ deliveryId: TrimmedNonEmptyString }).pipe(
+  HttpApiSchema.status(202),
+);
+const webhookEndpoint = {
+  params: WebhookParams,
+  success: WebhookAccepted,
+} as const;
+const WEBHOOK_PATH = "/api/hooks/:hookId/:token";
+
+class EnvironmentWebhooksHttpApi extends HttpApiGroup.make("webhooks")
+  .add(HttpApiEndpoint.post("webhookPost", WEBHOOK_PATH, webhookEndpoint))
+  .add(HttpApiEndpoint.put("webhookPut", WEBHOOK_PATH, webhookEndpoint))
+  .add(HttpApiEndpoint.patch("webhookPatch", WEBHOOK_PATH, webhookEndpoint))
+  .add(HttpApiEndpoint.get("webhookGet", WEBHOOK_PATH, webhookEndpoint)) {}
 
 export class EnvironmentHttpApi extends HttpApi.make("environment")
   .add(EnvironmentVoiceHttpApi)
   .add(EnvironmentMetadataHttpApi)
   .add(EnvironmentAuthHttpApi)
+  .add(EnvironmentMcpOAuthHttpApi)
   .add(EnvironmentOrchestrationHttpApi)
   .add(EnvironmentPullRequestsHttpApi)
   .add(EnvironmentProjectsHttpApi)
-  .add(EnvironmentConnectHttpApi) {}
+  .add(EnvironmentConnectHttpApi)
+  .add(EnvironmentWebhooksHttpApi) {}

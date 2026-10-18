@@ -9,10 +9,10 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
-import * as HttpApiBuilder from "effect/unstable/httpapi/HttpApiBuilder";
+import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import { annotateEnvironmentRequest, requireEnvironmentScope } from "../auth/http.ts";
-import * as ProviderInstanceRegistry from "../provider/Services/ProviderInstanceRegistry.ts";
-import * as ProviderRegistry from "../provider/Services/ProviderRegistry.ts";
+import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
+import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 
 export const voiceHttpApiLayer = HttpApiBuilder.group(
   EnvironmentHttpApi,

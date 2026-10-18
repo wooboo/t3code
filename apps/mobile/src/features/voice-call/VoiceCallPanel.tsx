@@ -15,9 +15,9 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AppText as Text } from "../../components/AppText";
-import { SymbolView, type AppSymbolName } from "../../components/AppSymbol";
-import { ControlPillMenu } from "../../components/ControlPill";
+import { AppText as Text } from "../../components/ui/AppText";
+import { SymbolView, type AppSymbolName } from "../../components/ui/AppSymbol";
+import { Menu as ControlPillMenu } from "../../components/ui/Menu";
 import type { VoiceAudioRoute } from "./voiceCallController";
 import type { VoiceCallHandle } from "./useVoiceCall";
 import { VoiceEnvironmentContext } from "./VoiceEnvironmentContext";

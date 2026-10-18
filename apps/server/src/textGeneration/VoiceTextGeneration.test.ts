@@ -4,7 +4,7 @@ import {
   CLAUDE_VOICE_ARGS,
   CODEX_VOICE_ARGS,
 } from "./VoiceTextGeneration.ts";
-import { toJsonSchemaObject } from "./TextGenerationUtils.ts";
+import { toJsonSchemaObject } from "@t3tools/provider-core/server/textGenerationUtils";
 
 describe("voice structured generation", () => {
   it("uses the provider-supported JSON Schema subset, not allOf length constraints", () => {

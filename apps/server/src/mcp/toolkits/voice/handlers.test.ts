@@ -1,8 +1,9 @@
+import * as McpToolAccess from "../../McpToolAccess.ts";
 import { CallUserInput, EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Stream from "effect/Stream";
 import { afterEach, vi } from "vite-plus/test";
 import { expect, it } from "@effect/vitest";
@@ -16,9 +17,13 @@ const decodeInput = Schema.decodeUnknownEffect(Schema.fromJsonString(CallUserInp
 afterEach(() => vi.unstubAllGlobals());
 const scope = {
   environmentId: EnvironmentId.make("environment-a"),
-  threadId: ThreadId.make("thread-a"),
-  providerSessionId: "provider-session",
-  providerInstanceId: ProviderInstanceId.make("codex"),
+  requestNamespace: "provider-session",
+  client: undefined,
+  thread: {
+    threadId: ThreadId.make("thread-a"),
+    providerSessionId: "provider-session",
+    providerInstanceId: ProviderInstanceId.make("codex"),
+  },
   capabilities: new Set<never>(),
   issuedAt: 0,
 };
@@ -26,7 +31,7 @@ function call(enabled: boolean) {
   return Effect.gen(function* () {
     const toolkit = yield* VoiceToolkit.pipe(
       Effect.provide(
-        VoiceToolkitHandlersLive.pipe(
+        McpToolAccess.HandlersLayer.layer(VoiceToolkitHandlersLive).pipe(
           Layer.provide(
             Layer.succeed(
               VoiceGateway,

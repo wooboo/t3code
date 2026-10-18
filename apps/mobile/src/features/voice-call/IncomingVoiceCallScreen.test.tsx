@@ -1,6 +1,6 @@
 import { act } from "react";
 import { Pressable } from "react-native";
-import { AppText } from "../../components/AppText";
+import { AppText } from "../../components/ui/AppText";
 import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import * as Option from "effect/Option";
@@ -12,7 +12,7 @@ const phone = vi.hoisted(() => ({
   windowVisible: false,
 }));
 vi.mock("react-native", () => ({ View: "View", Pressable: "Pressable" }));
-vi.mock("../../components/AppText", () => ({ AppText: "Text" }));
+vi.mock("../../components/ui/AppText", () => ({ AppText: "Text" }));
 vi.mock("@react-navigation/native", async () => {
   const { useEffect } = await import("react");
   return {

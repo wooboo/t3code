@@ -3,7 +3,7 @@ import { create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import type { VoiceCallHandle } from "./useVoiceCall";
 vi.mock("./VoiceEnvironmentContext", () => ({ VoiceEnvironmentContext: () => null }));
-vi.mock("../../components/ControlPill", () => ({ ControlPillMenu: "ControlPillMenu" }));
+vi.mock("../../components/ui/Menu", () => ({ Menu: "ControlPillMenu" }));
 
 type Drag = { translationY: number; velocityY: number; y: number };
 const gesture = vi.hoisted(() => ({
@@ -17,8 +17,8 @@ vi.mock("react-native", () => ({
   View: "View",
   useWindowDimensions: () => ({ height: 800 }),
 }));
-vi.mock("../../components/AppText", () => ({ AppText: "Text" }));
-vi.mock("../../components/AppSymbol", () => ({ SymbolView: "Symbol" }));
+vi.mock("../../components/ui/AppText", () => ({ AppText: "Text" }));
+vi.mock("../../components/ui/AppSymbol", () => ({ SymbolView: "Symbol" }));
 vi.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0 }),
 }));

@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { Platform, View } from "react-native";
-import { SymbolView } from "../../components/AppSymbol";
+import { SymbolView } from "../../components/ui/AppSymbol";
 import { serverEnvironment } from "../../state/server";
 import { useVoiceHost } from "./useVoiceHost";
 import { voiceSupport } from "./voiceSupport";

@@ -6,6 +6,7 @@ import {
   resolveDefaultProviderModelSelection,
   sortProviderInstanceEntries,
 } from "../../providerInstances";
+import { EnvironmentId } from "@t3tools/contracts";
 import type { ModelSelection, ProviderInstanceId, ServerProvider } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { ChevronDownIcon, LoaderCircleIcon } from "lucide-react";
@@ -295,7 +296,7 @@ export function VoiceSettingsPanel({
   const providerEntries = useMemo(
     () =>
       sortProviderInstanceEntries(
-        applyProviderInstanceSettings(deriveProviderInstanceEntries(providers), settings),
+        applyProviderInstanceSettings(deriveProviderInstanceEntries(providers), settings, null),
       ),
     [providers, settings],
   );
@@ -424,6 +425,7 @@ export function VoiceSettingsPanel({
               </div>
               {global && dedicatedModelEnabled && activeSelection ? (
                 <ProviderModelPicker
+                  environmentId={environmentId ? EnvironmentId.make(environmentId) : null}
                   activeInstanceId={activeSelection.instanceId}
                   model={activeSelection.model}
                   lockedProvider={null}

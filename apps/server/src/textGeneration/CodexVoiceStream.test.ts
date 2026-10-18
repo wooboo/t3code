@@ -6,10 +6,10 @@ import * as FileSystem from "effect/FileSystem";
 import { it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { ChildProcessSpawner } from "effect/unstable/process";
+import { ChildProcessSpawner } from "effect/process";
 import { CodexSettings, ProviderInstanceId, type VoiceInferenceEvent } from "@t3tools/contracts";
 import { describe, expect } from "vite-plus/test";
-import { writeFakeCli } from "../testUtils/fakeCli.ts";
+import { writeFakeCli } from "@t3tools/provider-testing/fakeCli";
 import { streamCodexVoice } from "./CodexVoiceStream.ts";
 
 const peer = `

@@ -2,6 +2,7 @@ import { AuthOrchestrationOperateScope } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import {
+  FetchHttpClient,
   HttpBody,
   HttpClient,
   HttpClientRequest,
@@ -9,8 +10,8 @@ import {
   HttpServerRequest,
   HttpServerRespondable,
   HttpServerResponse,
-} from "effect/unstable/http";
-import * as Socket from "effect/unstable/socket/Socket";
+} from "effect/http";
+import * as Socket from "effect/socket/Socket";
 import * as EnvironmentAuth from "./auth/EnvironmentAuth.ts";
 import {
   failEnvironmentAuthInvalid,
@@ -95,6 +96,7 @@ export const voiceGatewayRouteLayer = Layer.unwrap(
           EnvironmentScopeRequiredError: HttpServerRespondable.toResponse,
         }),
         Effect.provide(Socket.layerWebSocketConstructorGlobal),
+        Effect.provide(FetchHttpClient.layer),
       ),
     );
   }),

@@ -7,18 +7,19 @@ import {
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import * as CodexClient from "effect-codex-app-server/client";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-import { expandHomePath } from "../pathExpansion.ts";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import { getCodexServiceTierOptionValue } from "../codexModelOptions.ts";
-import { codexExecLaunchArgs, resolveCodexLaunchArgs } from "../provider/Layers/codexLaunchArgs.ts";
+import { codexExecLaunchArgs, resolveCodexLaunchArgs } from "../provider/codexLaunchArgs.ts";
 import { buildVoiceResponsePrompt, CODEX_VOICE_ARGS } from "./VoiceTextGeneration.ts";
-import { toJsonSchemaObject } from "./TextGenerationUtils.ts";
+import { toJsonSchemaObject } from "@t3tools/provider-core/server/textGenerationUtils";
 import { createVoiceJsonStream } from "./VoiceJsonStream.ts";
 
 const decodeJson = Schema.decodeUnknownEffect(Schema.Json);
@@ -44,7 +45,9 @@ export function streamCodexVoice(
         const { prompt, outputSchema } = buildVoiceResponsePrompt(input.prompt);
         const env = {
           ...environment,
-          ...(config.homePath ? { CODEX_HOME: expandHomePath(config.homePath) } : {}),
+          ...(config.homePath
+            ? { CODEX_HOME: expandHomePath(config.homePath, yield* HostProcess.HomeDirectory) }
+            : {}),
         };
         // app-server has no exec-only ignore flags. Override instructions below and
         // explicitly disable every inherited MCP server before starting a thread.

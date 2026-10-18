@@ -1,7 +1,9 @@
 import { useNavigation } from "@react-navigation/native";
 import { SettingsRow } from "./components/SettingsRow";
-import { ScreenScrollView as ScrollView } from "../../components/ScreenScrollView";
-import { AppText as Text } from "../../components/AppText";
+import { AuthSettingsWriteScope } from "@t3tools/contracts";
+import { readEnvironmentScope, useEnvironmentsWithScope } from "../../state/session";
+import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
+import { AppText as Text } from "../../components/ui/AppText";
 import {
   type ResponseStreamingMode,
   type ServerSettings,
@@ -24,6 +26,7 @@ import {
   SettingsEnvironmentFilterHeader,
 } from "./components/SettingsEnvironmentFilterHeader";
 import { BranchNamingSettings } from "./components/BranchNamingSettings";
+import { DatabaseStorageNotice } from "./components/DatabaseStorageNotice";
 import { SettingsChoiceRow } from "./components/SettingsChoiceRow";
 import { SettingsSection } from "./components/SettingsSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
@@ -36,6 +39,7 @@ import {
   uniformMobileSetting,
   type ScopedMobileSettingsTarget,
 } from "./settings-scoped-server";
+import { PullRequestGlyph } from "../pull-requests/pullRequestGlyphs";
 
 type SettingsPage = "new-threads" | "source-control" | "agent-behavior" | "maintenance";
 
@@ -50,6 +54,7 @@ const PAGE_PROJECT_KEYS: Record<SettingsPage, readonly ProjectScopedServerSettin
   "new-threads": ["defaultThreadEnvMode", "worktreeSubmodules", "defaultRuntimeMode"],
   "source-control": [
     "defaultAutoPull",
+    "removeAgentCreditsOnMerge",
     "newWorktreesStartFromOrigin",
     "branchNamingMode",
     "branchNamePrefix",
@@ -64,7 +69,6 @@ const SUBMODULE_CHOICES: ReadonlyArray<{
   readonly label: string;
   readonly description: string;
 }> = [
-  // Only offered at environment scope; a project falls back through "Use defaults".
   {
     mode: null,
     label: "Inherit",
@@ -84,7 +88,6 @@ const WORKSPACE_CHOICES: ReadonlyArray<{
   readonly label: string;
   readonly description: string;
 }> = [
-  // Only offered at environment scope; a project falls back through "Use defaults".
   {
     mode: null,
     label: "Inherit",
@@ -140,6 +143,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
   const navigation = useNavigation();
   const { selectedTargets, projectGroups, selectedProjectKey } = useSettingsEnvironmentFilter();
   const selectedProject = projectGroups.find((group) => group.key === selectedProjectKey);
+  const writableEnvironments = useEnvironmentsWithScope(selectedTargets, AuthSettingsWriteScope);
   const projectSelected = selectedProjectKey !== null;
   const targets = resolveMobileSettingsTargets(
     selectedTargets,
@@ -150,6 +154,9 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
   const [pendingTargets, setPendingTargets] = useState<
     readonly ScopedMobileSettingsTarget[] | null
   >(null);
+  const canWriteSettings =
+    targets.length > 0 &&
+    targets.every((target) => writableEnvironments.has(target.environment.environmentId));
   const displayTargets = pendingWrites > 0 && pendingTargets !== null ? pendingTargets : targets;
   const hasConnectedSelection = targets.length > 0;
   const reference = displayTargets[0] ?? null;
@@ -164,7 +171,14 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
     reportFailure: true,
   });
   const write = (patch: ServerSettingsPatch) => {
-    if (writeInFlight.current || !hasConnectedSelection) return;
+    if (
+      writeInFlight.current ||
+      !hasConnectedSelection ||
+      !targets.every((target) =>
+        readEnvironmentScope(target.environment.environmentId, AuthSettingsWriteScope),
+      )
+    )
+      return;
     const writes = planMobileScopedSettingsPatch(targets, projectSelected, patch);
     if (writes.length === 0) return;
     writeInFlight.current = true;
@@ -181,7 +195,13 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
     });
   };
   const clearProjectOverrides = () => {
-    if (writeInFlight.current) return;
+    if (
+      writeInFlight.current ||
+      !targets.every((target) =>
+        readEnvironmentScope(target.environment.environmentId, AuthSettingsWriteScope),
+      )
+    )
+      return;
     const writes = planMobileScopedSettingsClear(targets, PAGE_PROJECT_KEYS[props.page]);
     if (writes.length === 0) return;
     writeInFlight.current = true;
@@ -202,7 +222,10 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
       target.environment.serverConfig.environment.capabilities.projectSettingsOverrides === true,
   );
   const disabled =
-    pendingWrites > 0 || !hasConnectedSelection || (projectSelected && !supportsProjectOverrides);
+    !canWriteSettings ||
+    pendingWrites > 0 ||
+    !hasConnectedSelection ||
+    (projectSelected && !supportsProjectOverrides);
   const supportsContinuation = targets.every(
     (target) =>
       target.environment.serverConfig.environment.capabilities.threadRestartContinuation === true,
@@ -244,6 +267,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                   )}
                   supportsOverrides={supportsProjectOverrides}
                   pending={pendingWrites > 0}
+                  disabled={!canWriteSettings}
                   onClear={clearProjectOverrides}
                 />
               ) : null}
@@ -334,6 +358,16 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                     disabled={disabledFor("branchNamingMode")}
                     onChange={write}
                   />
+                  <SettingsSection title="Pull requests">
+                    <SettingsSwitchRow
+                      icon={PullRequestGlyph.merged}
+                      label="Remove agent credits when merging"
+                      subtitle="Remove recognized agent credits from GitHub merge and squash messages, keeping human co-authors. Includes auto-merge. Excludes merge queues, stack merges, and existing commits."
+                      value={uniform("removeAgentCreditsOnMerge")}
+                      disabled={disabledFor("removeAgentCreditsOnMerge")}
+                      onValueChange={(value) => write({ removeAgentCreditsOnMerge: value })}
+                    />
+                  </SettingsSection>
                   <SettingsSection title="Default branch">
                     <SettingsSwitchRow
                       icon="arrow.down.circle"
@@ -394,6 +428,15 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
 
               {props.page === "maintenance" ? (
                 <>
+                  {!projectSelected &&
+                    selectedTargets
+                      .filter(
+                        (target) =>
+                          target.serverConfig.environment.capabilities.databaseStorage === true,
+                      )
+                      .map((target) => (
+                        <DatabaseStorageNotice key={target.environmentId} target={target} />
+                      ))}
                   {!projectSelected ? (
                     <SettingsSection title="Manage environments">
                       {selectedTargets.map((target) => (
@@ -422,7 +465,7 @@ function ServerSettingsDetail(props: { readonly page: SettingsPage }) {
                       subtitle={
                         projectSelected
                           ? "Environment-wide setting. Select All projects to change it."
-                          : "Check installed provider CLIs for newer versions."
+                          : "Check installed provider CLIs for newer versions and fetch model catalog updates. When off, new models may not appear."
                       }
                       value={uniform("enableProviderUpdateChecks")}
                       disabled={disabledFor("enableProviderUpdateChecks")}

@@ -1,27 +1,36 @@
-import { CallUserInput, CallUserResult } from "@t3tools/contracts";
+import * as McpToolAccess from "../../McpToolAccess.ts";
+import { CallUserInput, CallUserResult, OrchestratorMcpFailure } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import * as HttpClient from "effect/unstable/http/HttpClient";
-import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
-import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import { VoiceGateway } from "../../../voiceGateway.ts";
 import { McpInvocationContext } from "../../McpInvocationContext.ts";
 import { VoiceCallToolError, VoiceToolkit } from "./tools.ts";
 
-export const VoiceToolkitHandlersLive = VoiceToolkit.toLayer(
+export const VoiceToolkitHandlersLive = McpToolAccess.toLayer(
+  VoiceToolkit,
   Effect.gen(function* () {
     const gateway = yield* VoiceGateway;
-    return VoiceToolkit.of({
-      call_user: (input) =>
+    return {
+      call_user: McpToolAccess.readsAsCaller((input: CallUserInput) =>
         Effect.gen(function* () {
           const scope = yield* McpInvocationContext;
+          if (scope.client?.access === "read-only")
+            return yield* new OrchestratorMcpFailure({
+              code: "capability_denied",
+              message: "Voice calling requires write access.",
+            });
+          if (!scope.thread)
+            return { status: "unavailable" as const, message: "Voice calling requires a thread." };
           if (!gateway || gateway.closed)
             return {
               status: "unavailable" as const,
               message: "Voice calling is not enabled in this environment. No call was placed.",
             };
           const url = new URL("/livekit/call-user", gateway.origin);
-          url.searchParams.set("thread", scope.threadId);
+          url.searchParams.set("thread", scope.thread.threadId);
           url.searchParams.set("environmentId", scope.environmentId);
           return yield* HttpClientRequest.post(url.toString()).pipe(
             HttpClientRequest.schemaBodyJson(CallUserInput)(input),
@@ -39,6 +48,7 @@ export const VoiceToolkitHandlersLive = VoiceToolkit.toLayer(
             Effect.provide(FetchHttpClient.layer),
           );
         }),
-    });
+      ),
+    };
   }),
 );

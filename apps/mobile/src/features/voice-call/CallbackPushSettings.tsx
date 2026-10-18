@@ -3,7 +3,7 @@ import { Platform, Pressable, View } from "react-native";
 import * as Option from "effect/Option";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { usePreparedConnection } from "../../state/session";
-import { AppText as Text } from "../../components/AppText";
+import { AppText as Text } from "../../components/ui/AppText";
 import {
   callbackPushState,
   registerCallbackDevice,
