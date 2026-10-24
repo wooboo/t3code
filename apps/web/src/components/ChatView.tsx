@@ -385,8 +385,7 @@ import {
 } from "../state/entities";
 import { useEnvironmentShellHasSnapshot } from "../state/shell";
 import { ChatComposer, type ChatComposerHandle } from "./chat/ChatComposer";
-import { VoicePanel } from "./chat/VoiceFront";
-import { queuePendingVoiceStart, cancelPendingVoiceStart } from "./chat/pendingVoiceStart";
+import { useDraftVoiceStart } from "./chat/useDraftVoiceStart";
 import { useVoiceFront } from "./chat/useVoiceFront";
 import { createPageScrollController, type PageScrollKey } from "./chat/pageScrollController";
 import { isTimelineScrollTarget } from "./chat/timelineScrollTarget";
@@ -5925,52 +5924,20 @@ export default function ChatView(props: ChatViewProps) {
       return next;
     });
   };
-  const draftVoiceGeneration = useRef(0);
-  useEffect(() => {
-    const key = routeThreadKey;
-    return () => {
-      if (key) draftVoiceGeneration.current++;
-    };
-  }, [routeThreadKey]);
-  const startDraftVoice = async () => {
-    if (
-      !activeThread ||
-      !activeProject ||
-      isServerThread ||
-      sendInFlightRef.current ||
-      isConnecting
-    )
-      return;
-    const sendContext = composerRef.current?.getSendContext();
-    if (!sendContext?.providerAvailable) return;
-    const generation = draftVoiceGeneration.current;
-    if (sendEnvMode === "worktree" && !activeThread.worktreePath) {
-      setThreadError(
-        activeThread.id,
-        "Select Current checkout to start a voice conversation, or create the worktree first.",
-      );
-      return;
-    }
-    sendInFlightRef.current = true;
-    const output = new AudioContext();
-    void output.resume();
-    let stream: MediaStream | undefined;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      if (generation !== draftVoiceGeneration.current) {
-        stream.getTracks().forEach((track) => track.stop());
-        void output.close();
-        return;
-      }
-      queuePendingVoiceStart(`${environmentId}:${activeThread.id}`, { stream, output });
-      const result = await createThread({
+  const startDraftVoice = useDraftVoiceStart({
+    routeThreadKey,
+    sendInFlightRef,
+    setThreadError,
+    getDraft: () => {
+      if (!activeThread || !activeProject || isServerThread || isConnecting) return null;
+      const sendContext = composerRef.current?.getSendContext();
+      if (!sendContext?.providerAvailable) return null;
+      return {
         environmentId,
+        requiresWorktree: sendEnvMode === "worktree",
         input: {
           threadId: activeThread.id,
           projectId: activeProject.id,
-          title: "Voice conversation",
           modelSelection: sendContext.selectedModelSelection,
           runtimeMode,
           interactionMode,
@@ -5978,28 +5945,9 @@ export default function ChatView(props: ChatViewProps) {
           worktreePath: activeThread.worktreePath,
           createdAt: activeThread.createdAt,
         },
-      });
-      if (result._tag === "Failure") throw Error("Could not create the voice thread. Try again.");
-      const ref = scopeThreadRef(environmentId, activeThread.id);
-      useRightPanelStore.getState().open(ref, "voice");
-      markPromotedDraftThreadByRef(ref);
-      await navigate({
-        to: "/$environmentId/$threadId",
-        params: buildThreadRouteParams(ref),
-        replace: true,
-      });
-    } catch (error) {
-      cancelPendingVoiceStart(`${environmentId}:${activeThread.id}`);
-      stream?.getTracks().forEach((track) => track.stop());
-      if (output.state !== "closed") void output.close();
-      setThreadError(
-        activeThread.id,
-        error instanceof Error ? error.message : "Could not start voice conversation.",
-      );
-    } finally {
-      sendInFlightRef.current = false;
-    }
-  };
+      };
+    },
+  });
   const composerVoice =
     isLocalDraftThread && import.meta.env.DEV
       ? { ...voice, enabled: Boolean(activeProject), start: startDraftVoice }
@@ -7754,65 +7702,56 @@ export default function ChatView(props: ChatViewProps) {
   }
 
   const rightPanelContent = activeThreadRef ? (
-    renderedRightPanelSurface?.kind === "voice" ? (
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <VoicePanel
-          voice={voice}
-          threadId={activeThread?.id ?? null}
-          environmentId={environmentId}
-        />
-      </div>
-    ) : (
-      <RightPanelSurfaceContent
-        surface={renderedRightPanelSurface}
-        activeSurfaceId={activeRightPanelSurface?.id ?? null}
-        threadRef={activeThreadRef}
-        environmentId={activeThread.environmentId}
-        visible={rightPanelOpen}
-        composerDraftTarget={composerDraftTarget}
-        keybindings={keybindings}
-        configuredPreviewUrls={configuredPreviewUrls}
-        workspaceMutationId={workspaceMutationId}
-        getShortcutContext={getShortcutContextStable}
-        onSendAnnotation={sendPreviewAnnotationStable}
-        onCloseSurface={closeRightPanelSurface}
-        terminal={{
-          launchContext: activeTerminalLaunchContext ?? null,
-          focusRequestId: terminalFocusRequestId,
-          keybindings,
-          onAddTerminalContext: addTerminalContextToDraftStable,
-          onSplitTerminal: splitPanelTerminalStable,
-          onSplitTerminalVertical: splitPanelTerminalVerticalStable,
-          onNewTerminal: addTerminalSurfaceStable,
-          onActiveTerminalChange: activatePanelTerminalStable,
-          onCloseTerminal: closePanelTerminalStable,
-          splitShortcutLabel: splitTerminalShortcutLabel ?? undefined,
-          splitVerticalShortcutLabel: splitTerminalVerticalShortcutLabel ?? undefined,
-          newShortcutLabel: newTerminalShortcutLabel ?? undefined,
-          closeShortcutLabel: closeTerminalShortcutLabel ?? undefined,
-        }}
-        pullRequest={{
-          capabilityKnown: pullRequestsCapabilityKnown,
-          supported: supportsPullRequests,
-          projectId: activeThread.projectId,
-          pullRequests: visiblePullRequests,
-          linkedPullRequest: linkedThreadPullRequest,
-          branchPullRequest: activeThreadShell?.branchPullRequest ?? activeThread.branchPullRequest,
-          onBack:
-            pullRequestsSurfaceAvailable && visiblePullRequestCount > 1
-              ? addPullRequestsSurfaceStable
-              : undefined,
-        }}
-        files={{
-          projectName: activeProject?.title ?? null,
-          workspaceRoot: activeWorkspaceRoot,
-          availableEditors,
-          pendingSurfaceIds: pendingFileSurfaceIds,
-          onOpenFile: openFileSurfaceStable,
-          onPendingChange: handleFilePendingChangeStable,
-        }}
-      />
-    )
+    <RightPanelSurfaceContent
+      voice={voice}
+      surface={renderedRightPanelSurface}
+      activeSurfaceId={activeRightPanelSurface?.id ?? null}
+      threadRef={activeThreadRef}
+      environmentId={activeThread.environmentId}
+      visible={rightPanelOpen}
+      composerDraftTarget={composerDraftTarget}
+      keybindings={keybindings}
+      configuredPreviewUrls={configuredPreviewUrls}
+      workspaceMutationId={workspaceMutationId}
+      getShortcutContext={getShortcutContextStable}
+      onSendAnnotation={sendPreviewAnnotationStable}
+      onCloseSurface={closeRightPanelSurface}
+      terminal={{
+        launchContext: activeTerminalLaunchContext ?? null,
+        focusRequestId: terminalFocusRequestId,
+        keybindings,
+        onAddTerminalContext: addTerminalContextToDraftStable,
+        onSplitTerminal: splitPanelTerminalStable,
+        onSplitTerminalVertical: splitPanelTerminalVerticalStable,
+        onNewTerminal: addTerminalSurfaceStable,
+        onActiveTerminalChange: activatePanelTerminalStable,
+        onCloseTerminal: closePanelTerminalStable,
+        splitShortcutLabel: splitTerminalShortcutLabel ?? undefined,
+        splitVerticalShortcutLabel: splitTerminalVerticalShortcutLabel ?? undefined,
+        newShortcutLabel: newTerminalShortcutLabel ?? undefined,
+        closeShortcutLabel: closeTerminalShortcutLabel ?? undefined,
+      }}
+      pullRequest={{
+        capabilityKnown: pullRequestsCapabilityKnown,
+        supported: supportsPullRequests,
+        projectId: activeThread.projectId,
+        pullRequests: visiblePullRequests,
+        linkedPullRequest: linkedThreadPullRequest,
+        branchPullRequest: activeThreadShell?.branchPullRequest ?? activeThread.branchPullRequest,
+        onBack:
+          pullRequestsSurfaceAvailable && visiblePullRequestCount > 1
+            ? addPullRequestsSurfaceStable
+            : undefined,
+      }}
+      files={{
+        projectName: activeProject?.title ?? null,
+        workspaceRoot: activeWorkspaceRoot,
+        availableEditors,
+        pendingSurfaceIds: pendingFileSurfaceIds,
+        onOpenFile: openFileSurfaceStable,
+        onPendingChange: handleFilePendingChangeStable,
+      }}
+    />
   ) : null;
   const panelToggleControlProps = {
     terminalAvailable: activeProject !== null,

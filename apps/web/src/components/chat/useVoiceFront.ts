@@ -1,4 +1,6 @@
+import { mergeVoiceHistory } from "@t3tools/client-runtime/voice-input";
 import { useEffect, useRef, useState } from "react";
+import { useStableCallback } from "../../hooks/useStableCallback";
 import { takePendingVoiceStart, type PreparedVoiceAudio } from "./pendingVoiceStart";
 import { voiceError } from "./voiceAudio";
 
@@ -172,6 +174,33 @@ export function useVoiceFront(threadId: string | null, environmentId?: string) {
   const generation = useRef(0);
   const origin = import.meta.env.VITE_VOICE_FRONT_ORIGIN || "/voice/";
   const enabled = Boolean(import.meta.env.DEV && origin && threadId);
+  const historyRequest = useRef<AbortController | null>(null);
+  const refreshHistory = useStableCallback(() => {
+    const atRequestStart = state.transcript;
+    historyRequest.current?.abort();
+    const historyAbort = new AbortController();
+    historyRequest.current = historyAbort;
+    if (origin && threadId) {
+      const url = new URL("t3-history", new URL(origin, window.location.origin));
+      url.searchParams.set("thread", threadId);
+      if (environmentId) url.searchParams.set("environmentId", environmentId);
+      void fetch(url, { signal: historyAbort.signal })
+        .then(async (response) => {
+          if (!response.ok) return;
+          const data = await response.json();
+          if (!historyAbort.signal.aborted && Array.isArray(data.messages))
+            setState((s) => ({
+              ...s,
+              transcript: mergeVoiceHistory<Transcript>(
+                data.messages,
+                s.transcript,
+                atRequestStart,
+              ),
+            }));
+        })
+        .catch(() => {});
+    }
+  });
 
   function stop() {
     generation.current++;
@@ -189,41 +218,22 @@ export function useVoiceFront(threadId: string | null, environmentId?: string) {
   useEffect(() => {
     setState(initial);
     setSettingsOpen(false);
-    const historyAbort = new AbortController();
-    if (origin && threadId) {
-      const url = new URL("t3-history", new URL(origin, window.location.origin));
-      url.searchParams.set("thread", threadId);
-      if (environmentId) url.searchParams.set("environmentId", environmentId);
-      void fetch(url, { signal: historyAbort.signal })
-        .then(async (response) => {
-          if (!response.ok) return;
-          const data = await response.json();
-          if (!historyAbort.signal.aborted && Array.isArray(data.messages))
-            setState((s) => ({
-              ...s,
-              transcript: [
-                ...data.messages.filter(
-                  (m: Transcript) => !s.transcript.some((t) => t.id === m.id),
-                ),
-                ...s.transcript,
-              ].slice(-100),
-            }));
-        })
-        .catch(() => {});
-    }
+    refreshHistory();
+    window.addEventListener("focus", refreshHistory);
     const settingsChanged = (event: Event) => {
       if ((event as CustomEvent<{ threadId: string }>).detail?.threadId === threadId)
         resources.current?.send({ type: "t3.settings.refresh" });
     };
     window.addEventListener("t3-voice-settings-changed", settingsChanged);
     return () => {
-      historyAbort.abort();
+      historyRequest.current?.abort();
+      window.removeEventListener("focus", refreshHistory);
       window.removeEventListener("t3-voice-settings-changed", settingsChanged);
       generation.current++;
       resources.current?.stop();
       resources.current = null;
     };
-  }, [threadId, origin, environmentId]);
+  }, [threadId, origin, environmentId, refreshHistory]);
 
   useEffect(() => {
     let cancelled = false;
@@ -441,6 +451,7 @@ export function useVoiceFront(threadId: string | null, environmentId?: string) {
 
   return {
     ...state,
+    refreshHistory,
     enabled,
     start,
     stop,

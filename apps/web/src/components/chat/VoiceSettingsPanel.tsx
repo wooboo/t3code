@@ -7,7 +7,12 @@ import {
   sortProviderInstanceEntries,
 } from "../../providerInstances";
 import { EnvironmentId } from "@t3tools/contracts";
-import type { ModelSelection, ProviderInstanceId, ServerProvider } from "@t3tools/contracts";
+import type {
+  ModelSelection,
+  ProviderInstanceId,
+  ServerProvider,
+  VoiceCallbackSettings,
+} from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
 import { ChevronDownIcon, LoaderCircleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -17,7 +22,7 @@ import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 
-export type VoiceSettingsConfig = {
+export type VoiceSettingsConfig = VoiceCallbackSettings & {
   modelSelection: ModelSelection | null;
   instructions: { global: string; project: string; thread: string };
   enabledSkills: string[];
@@ -46,6 +51,7 @@ type VoiceSettingsResponse = {
 };
 
 type VoiceSettingsPatch = {
+  autoCallback?: boolean;
   modelSelection?: ModelSelection | null;
   instructions?: Partial<VoiceSettingsConfig["instructions"]>;
   enabledSkills?: string[];
@@ -53,6 +59,7 @@ type VoiceSettingsPatch = {
 };
 
 const DEFAULT_CONFIG: VoiceSettingsConfig = {
+  autoCallback: false,
   modelSelection: null,
   instructions: { global: "", project: "", thread: "" },
   enabledSkills: [],
@@ -62,6 +69,7 @@ const DEFAULT_CONFIG: VoiceSettingsConfig = {
 function mergeConfig(config: VoiceSettingsConfig, patch: VoiceSettingsPatch): VoiceSettingsConfig {
   return {
     ...config,
+    ...(patch.autoCallback !== undefined ? { autoCallback: patch.autoCallback } : {}),
     ...(patch.modelSelection !== undefined ? { modelSelection: patch.modelSelection } : {}),
     ...(patch.instructions
       ? { instructions: { ...config.instructions, ...patch.instructions } }
@@ -206,10 +214,16 @@ export function useVoiceSettings(
           threadId === "__global__"
             ? {
                 modelSelection: draft.modelSelection,
+                autoCallback: draft.autoCallback,
                 instructions: { global: draft.instructions.global },
                 terms: draft.terms,
               }
-            : draft,
+            : {
+                modelSelection: draft.modelSelection,
+                instructions: draft.instructions,
+                enabledSkills: draft.enabledSkills,
+                terms: draft.terms,
+              },
         );
     },
     reset: () => setDraft(null),
@@ -358,6 +372,23 @@ export function VoiceSettingsPanel({
         ) : null}
         {data ? (
           <>
+            {global ? (
+              <section className="space-y-2 border-t border-border/60 pt-4">
+                <Label>
+                  <Checkbox
+                    checked={config.autoCallback}
+                    disabled={saving}
+                    onCheckedChange={(checked) => void update({ autoCallback: checked === true })}
+                  />
+                  Oddzwaniaj automatycznie po zakończeniu zadania
+                </Label>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Gdy rozłączysz rozmowę, agent zadzwoni na zarejestrowany telefon z Androidem,
+                  kiedy zadanie zlecone głosowo będzie gotowe. Wymaga włączonych powiadomień o
+                  połączeniach w aplikacji. Podczas rozmowy wynik usłyszysz na bieżąco.
+                </p>
+              </section>
+            ) : null}
             <section
               aria-labelledby="voice-model-heading"
               className="space-y-3 border-t border-border/60 pt-4"

@@ -23,6 +23,9 @@ import { PullRequestDetailGhost } from "../pullRequest/PullRequestGhosts";
 import { PullRequestsUnavailableState } from "../pullRequest/PullRequestsUnavailableState";
 import { ThreadPullRequestsPanel } from "../pullRequest/ThreadPullRequestsPanel";
 
+import { VoicePanel } from "./VoiceFront";
+import type { useVoiceFront } from "./useVoiceFront";
+
 const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
 );
@@ -59,6 +62,7 @@ export interface RightPanelFileProps {
 
 /** The body of the thread's right panel for the surface it is showing. */
 export function RightPanelSurfaceContent(props: {
+  readonly voice?: ReturnType<typeof useVoiceFront>;
   readonly surface: RightPanelSurface | null;
   readonly activeSurfaceId: string | null;
   readonly threadRef: ScopedThreadRef;
@@ -81,6 +85,16 @@ export function RightPanelSurfaceContent(props: {
   const { surface, threadRef, visible } = props;
   if (surface === null) return null;
   switch (surface.kind) {
+    case "voice":
+      return props.voice ? (
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <VoicePanel
+            voice={props.voice}
+            threadId={threadRef.threadId}
+            environmentId={props.environmentId}
+          />
+        </div>
+      ) : null;
     case "preview":
       return (
         <Suspense fallback={null}>

@@ -53,22 +53,29 @@ it("stages model and instruction edits until save, supports discard, and retains
   await act(() => {
     root = create(<Probe />);
   });
+  expect(current.data?.config.autoCallback).toBe(false);
   await act(() => current.update({ instructions: { global: "Changed" } }));
   expect(current.changed).toBe(true);
   expect(fetcher).toHaveBeenCalledTimes(1);
   await act(() => current.reset());
   expect(current.changed).toBe(false);
   expect(current.data?.config.instructions.global).toBe("Original");
-  await act(() => current.update({ instructions: { global: "Saved" } }));
+  await act(() => current.update({ instructions: { global: "Saved" }, autoCallback: true }));
   await act(() => current.save());
   expect(current.changed).toBe(false);
   expect(current.data?.config.instructions.global).toBe("Saved");
-  await act(() => current.update({ instructions: { global: "Retry me" } }));
+  expect(current.data?.config.autoCallback).toBe(true);
+  await act(() => current.update({ instructions: { global: "Retry me" }, autoCallback: false }));
   fail = true;
   await act(async () => {
     await expect(current.save()).rejects.toThrow();
   });
   expect(current.changed).toBe(true);
   expect(current.data?.config.instructions.global).toBe("Retry me");
+  expect(current.data?.config.autoCallback).toBe(false);
   expect(current.error).toContain("Could not save");
+  fail = false;
+  await act(() => current.save());
+  expect(current.data?.config.autoCallback).toBe(false);
+  expect(current.changed).toBe(false);
 });
