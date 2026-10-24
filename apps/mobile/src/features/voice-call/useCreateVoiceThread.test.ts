@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   startTurn: vi.fn(),
   config: vi.fn(),
   error: vi.fn(),
+  modelUnavailable: vi.fn(),
 }));
 vi.mock("react", () => ({ useCallback: (callback: unknown) => callback }));
 vi.mock("../../state/threads", () => ({
@@ -21,13 +22,6 @@ vi.mock("../../state/server", () => ({ serverEnvironment: { configValueAtom: () 
 vi.mock("../../state/use-remote-environment-registry", () => ({
   setPendingConnectionError: mocks.error,
 }));
-vi.mock("../../state/use-composer-drafts", () => ({
-  scheduleUnusedComposerAttachmentCleanup: vi.fn(),
-}));
-vi.mock("../../lib/attachmentUpload", () => ({
-  validateDraftFileAttachments: () => null,
-  prepareTurnAttachments: async () => ({ status: "ready", attachments: [], draftAttachments: [] }),
-}));
 vi.mock("../../lib/commandMetadata", () => ({
   makeTurnCommandMetadata: () => ({
     threadId: "voice-thread",
@@ -36,10 +30,9 @@ vi.mock("../../lib/commandMetadata", () => ({
     createdAt: "2026-09-07T10:00:00.000Z",
   }),
 }));
-vi.mock("../../lib/uuid", () => ({ randomHex: () => "123" }));
-vi.mock("../../lib/modelOptions", () => ({ isModelSelectionUnavailable: () => false }));
+vi.mock("../../lib/modelOptions", () => ({ isModelSelectionUnavailable: mocks.modelUnavailable }));
 
-import { useCreateProjectThread } from "./use-project-actions";
+import { useCreateVoiceThread } from "./useCreateVoiceThread";
 
 function input() {
   return {
@@ -47,7 +40,7 @@ function input() {
       environmentId: EnvironmentId.make("env"),
       id: ProjectId.make("project"),
       workspaceRoot: "/project",
-    } as Parameters<ReturnType<typeof useCreateProjectThread>>[0]["project"],
+    } as Parameters<ReturnType<typeof useCreateVoiceThread>>[0]["project"],
     modelSelection: { instanceId: ProviderInstanceId.make("codex"), model: "gpt-5.6-sol" },
     envMode: "local" as const,
     branch: "main",
@@ -56,19 +49,18 @@ function input() {
     interactionMode: "default" as const,
     initialMessageText: "",
     initialAttachments: [],
-    onAttachmentsUploaded: async () => {},
-    createOnly: true,
   };
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.modelUnavailable.mockReturnValue(false);
   mocks.config.mockReturnValue({ providers: [], environment: { capabilities: {} } });
   mocks.create.mockResolvedValue(AsyncResult.success(undefined));
   mocks.startTurn.mockResolvedValue(AsyncResult.success(undefined));
 });
 describe("creating a thread before the first voice message", () => {
   it("creates an empty thread in the selected workspace without starting an agent turn", async () => {
-    const result = await useCreateProjectThread()(input());
+    const result = await useCreateVoiceThread()(input());
     expect(result._tag, JSON.stringify(mocks.error.mock.calls)).toBe("Success");
     expect(mocks.create).toHaveBeenCalledWith({
       environmentId: "env",
@@ -84,32 +76,8 @@ describe("creating a thread before the first voice message", () => {
     });
     expect(mocks.startTurn).not.toHaveBeenCalled();
   });
-  it("keeps the normal send path's empty-task validation", async () => {
-    const result = await useCreateProjectThread()({ ...input(), createOnly: false });
-    expect(result._tag).toBe("Failure");
-    expect(mocks.create).not.toHaveBeenCalled();
-    expect(mocks.startTurn).not.toHaveBeenCalled();
-  });
-  it("still sends a written first task through the normal bootstrap", async () => {
-    const result = await useCreateProjectThread()({
-      ...input(),
-      createOnly: false,
-      initialMessageText: "Fix this bug",
-    });
-    expect(result._tag).toBe("Success");
-    expect(mocks.create).not.toHaveBeenCalled();
-    expect(mocks.startTurn).toHaveBeenCalledWith({
-      environmentId: "env",
-      input: expect.objectContaining({
-        message: expect.objectContaining({ text: "Fix this bug" }),
-        bootstrap: expect.objectContaining({
-          createThread: expect.objectContaining({ worktreePath: "/existing-worktree" }),
-        }),
-      }),
-    });
-  });
   it("does not discard text when asked to create an empty voice thread", async () => {
-    const result = await useCreateProjectThread()({
+    const result = await useCreateVoiceThread()({
       ...input(),
       initialMessageText: "Keep my draft",
     });
@@ -118,14 +86,41 @@ describe("creating a thread before the first voice message", () => {
     expect(mocks.startTurn).not.toHaveBeenCalled();
   });
   it("does not silently replace a new worktree with the current checkout", async () => {
-    const result = await useCreateProjectThread()({ ...input(), envMode: "worktree" });
+    const result = await useCreateVoiceThread()({ ...input(), envMode: "worktree" });
     expect(result._tag).toBe("Failure");
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.startTurn).not.toHaveBeenCalled();
   });
+  it("requires loaded provider settings", async () => {
+    mocks.config.mockReturnValue(null);
+    expect((await useCreateVoiceThread()(input()))._tag).toBe("Failure");
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("rejects an unavailable model", async () => {
+    mocks.modelUnavailable.mockReturnValue(true);
+    expect((await useCreateVoiceThread()(input()))._tag).toBe("Failure");
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("preserves draft attachments rather than creating an empty thread", async () => {
+    const result = await useCreateVoiceThread()({
+      ...input(),
+      initialAttachments: [
+        {
+          id: "file",
+          type: "file",
+          name: "file.txt",
+          mimeType: "text/plain",
+          sizeBytes: 1,
+          fileUri: "file:///file.txt",
+        },
+      ],
+    });
+    expect(result._tag).toBe("Failure");
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
   it("returns creation failure so the draft screen stays open", async () => {
     mocks.create.mockResolvedValue(AsyncResult.failure(Cause.fail(new Error("offline"))));
-    const result = await useCreateProjectThread()(input());
+    const result = await useCreateVoiceThread()(input());
     expect(result._tag).toBe("Failure");
     expect(mocks.create).toHaveBeenCalledOnce();
     expect(mocks.startTurn).not.toHaveBeenCalled();

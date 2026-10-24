@@ -1,3 +1,4 @@
+import { mergeVoiceHistory } from "@t3tools/client-runtime/voice-input";
 import { DisconnectReason, Room, RoomEvent } from "livekit-client";
 import type { VoiceCallState } from "./voiceCallController";
 
@@ -11,6 +12,7 @@ export class LivekitCallController {
     messages: [],
   };
   private generation = 0;
+  private historyRequest = 0;
   private cleanup: (() => Promise<void>) | null = null;
   private stopping = Promise.resolve();
   private room: Room | null = null;
@@ -40,20 +42,17 @@ export class LivekitCallController {
     this.deps.onChange(this.state);
   }
   async loadHistory(signal: AbortSignal) {
+    const request = ++this.historyRequest;
+    const atRequestStart = this.state.messages;
     const url = this.url("t3-history");
     url.searchParams.set("thread", this.deps.threadId);
     if (this.deps.environmentId) url.searchParams.set("environmentId", this.deps.environmentId);
     const response = await this.deps.fetch(url, { headers: this.headers(), signal });
     if (!response.ok || signal.aborted) return;
     const data = await response.json();
-    if (!signal.aborted && Array.isArray(data.messages))
+    if (!signal.aborted && request === this.historyRequest && Array.isArray(data.messages))
       this.update({
-        messages: [
-          ...data.messages.filter(
-            (m: { id: string }) => !this.state.messages.some((current) => current.id === m.id),
-          ),
-          ...this.state.messages,
-        ].slice(-100),
+        messages: mergeVoiceHistory(data.messages, this.state.messages, atRequestStart),
       });
   }
   async start() {

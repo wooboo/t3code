@@ -64,7 +64,10 @@ object VoiceFcmPush {
 
   fun receive(context: Context, data: Map<String, String>) {
     val host = data["hostEnvironmentId"] ?: return
-    if (data["t3_kind"] != "voice_call" || !prefs(context).getBoolean("enabled:$host", false)) return
-    VoiceCallNotifications.receive(context, data)
+    if (!prefs(context).getBoolean("enabled:$host", false)) return
+    when (data["t3_kind"]) {
+      "voice_call" -> VoiceCallNotifications.receive(context, data)
+      "voice_result" -> VoiceCallNotifications.receiveResult(context, data)
+    }
   }
 }

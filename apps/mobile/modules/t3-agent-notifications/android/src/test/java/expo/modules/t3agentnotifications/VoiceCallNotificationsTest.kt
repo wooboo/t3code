@@ -64,6 +64,40 @@ class VoiceCallNotificationsTest {
     VoiceCallNotifications.receive(context, invitation() + ("callId" to "../other"))
     assertNull(shadowOf(manager).getNotification(74001))
   }
+  private fun result() = mapOf(
+    "t3_kind" to "voice_result", "messageId" to "agent:result-123",
+    "hostEnvironmentId" to "host-123", "environmentId" to "remote", "threadId" to "thread-1",
+    "createdAt" to System.currentTimeMillis().toString())
+
+  @Test fun `voice result notification persists after ringing ends and opens the originating thread`() {
+    context.getSharedPreferences("t3-voice-fcm", 0).edit().putBoolean("enabled:host-123", true).commit()
+    VoiceCallNotifications.receive(context, invitation())
+    VoiceFcmPush.receive(context, result())
+    VoiceCallNotifications.dismiss(context)
+    val entry = manager.activeNotifications.single()
+    assertEquals("voice-result", entry.tag)
+    val notification = entry.notification
+    assertEquals(Notification.CATEGORY_MESSAGE, notification.category)
+    assertEquals(0L, notification.timeoutAfter)
+    assertTrue(notification.flags and Notification.FLAG_INSISTENT == 0)
+    assertEquals("t3code-dev:///threads/remote/thread-1", shadowOf(notification.contentIntent).savedIntent.dataString)
+    VoiceFcmPush.receive(context, result())
+    assertEquals(1, manager.activeNotifications.size)
+  }
+
+  @Test fun `UnifiedPush delivers a result without a call and rejects stale or disabled results`() {
+    val prefs = context.getSharedPreferences("t3-voice-unifiedpush", 0)
+    prefs.edit().putBoolean("enabled:host-123", true).commit()
+    val data = JSONObject(result()).toString().toByteArray()
+    VoiceUnifiedPush.receive(context, PushMessage(data, true), "host-123")
+    assertEquals(1, manager.activeNotifications.size)
+    manager.cancelAll()
+    VoiceCallNotifications.receiveResult(context, result() + mapOf(
+      "messageId" to "agent:stale", "createdAt" to (System.currentTimeMillis() - 86_400_001).toString()))
+    VoiceUnifiedPush.disable(context, "host-123")
+    VoiceUnifiedPush.receive(context, PushMessage(JSONObject(result() + ("messageId" to "agent:other")).toString().toByteArray(), true), "host-123")
+    assertEquals(0, manager.activeNotifications.size)
+  }
   @Test fun `UnifiedPush only rings for decrypted messages bound to an enabled host`() {
     context.getSharedPreferences("t3-voice-unifiedpush", 0).edit().putBoolean("enabled:host-123", true).commit()
     val data = JSONObject(invitation()).put("t3_kind", "voice_call").toString().toByteArray()

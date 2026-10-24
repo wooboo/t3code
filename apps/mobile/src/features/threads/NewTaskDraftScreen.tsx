@@ -1,10 +1,4 @@
-import { useServerConfigs } from "../../state/entities";
-import { useVoiceHost } from "../voice-call/useVoiceHost";
-import { useCreateProjectThread } from "./use-project-actions";
-import {
-  isAtomCommandInterrupted,
-  squashAtomCommandFailure,
-} from "@t3tools/client-runtime/state/runtime";
+import { useNewTaskVoice } from "../voice-call/useNewTaskVoice";
 import { Toolbar } from "../../components/ui/Toolbar";
 import * as Dialog from "../../components/ui/Dialog";
 import { useAtomValue } from "@effect/atom-react";
@@ -26,7 +20,7 @@ import {
   type NavigationAction,
 } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, View } from "react-native";
+import { Platform, Pressable, ScrollView, View } from "react-native";
 import {
   KeyboardController,
   KeyboardStickyView,
@@ -205,7 +199,7 @@ export function NewTaskDraftScreen(props: {
 }) {
   const projects = useProjects();
   const flow = useNewTaskFlow();
-  const createProjectThread = useCreateProjectThread();
+  const newTaskVoice = useNewTaskVoice();
   const navigation = useNavigation();
   const {
     consumeShare,
@@ -1194,9 +1188,6 @@ export function NewTaskDraftScreen(props: {
     [composerMenu, flow, selectedEnvironmentServerConfig],
   );
 
-  const voiceHost = useVoiceHost();
-  const voiceServerConfigs = useServerConfigs();
-
   async function handleStart(openVoice = false): Promise<void> {
     if (voiceInput.blocksSubmission || pendingPastedTextAttachmentCountRef.current > 0) return;
     const selectedProject = flow.selectedProject;
@@ -1225,26 +1216,14 @@ export function NewTaskDraftScreen(props: {
 
     if (
       openVoice &&
-      voiceServerConfigs.get(voiceHost.environmentId ?? selectedProject.environmentId)?.environment
-        .capabilities.voice === false
-    ) {
-      Alert.alert(
-        "Rozmowa głosowa",
-        "To środowisko nie obsługuje voice. Wybierz serwer oznaczony Voice w Ustawienia → Voice.",
-      );
+      !newTaskVoice.validate({
+        environmentId: selectedProject.environmentId,
+        connected: environmentConnected,
+        createOnly,
+        workspaceMode,
+      })
+    )
       return;
-    }
-    if (openVoice && !environmentConnected) {
-      Alert.alert("Rozmowa głosowa", "Połącz się z serwerem przed rozpoczęciem rozmowy.");
-      return;
-    }
-    if (createOnly && workspaceMode === "worktree") {
-      Alert.alert(
-        "Rozmowa głosowa",
-        "Aby rozpocząć głosem, wybierz istniejący katalog pracy. Nowy worktree wymaga pierwszej wiadomości tekstowej.",
-      );
-      return;
-    }
 
     if (
       attachmentBlockReason !== null ||
@@ -1303,9 +1282,8 @@ export function NewTaskDraftScreen(props: {
     }
 
     if (createOnly) {
-      flow.setSubmitting(true);
-      try {
-        const result = await createProjectThread({
+      const action = await newTaskVoice.createEmpty(
+        {
           project: selectedProject,
           modelSelection,
           envMode: workspaceMode,
@@ -1320,34 +1298,12 @@ export function NewTaskDraftScreen(props: {
             ? (draft.interactionMode ?? flow.interactionMode)
             : "default",
           initialMessageText,
-          createOnly: true,
           initialAttachments: draft.attachments,
-          onAttachmentsUploaded: async () => {},
-        });
-        if (result._tag === "Failure") {
-          if (!isAtomCommandInterrupted(result)) {
-            const error = squashAtomCommandFailure(result);
-            Alert.alert(
-              "Could not start task",
-              error instanceof Error ? error.message : "The task could not be started.",
-            );
-          }
-          return;
-        }
-        clearComposerDraftContent(draftKey, {
-          clearModelSelection: true,
-          clearWorkspaceSelection: true,
-        });
-        setSubmitNavigationAction(
-          StackActions.replace("Thread", {
-            environmentId: String(result.value.environmentId),
-            threadId: String(result.value.threadId),
-            openVoice: true,
-          }),
-        );
-      } finally {
-        flow.setSubmitting(false);
-      }
+        },
+        draftKey,
+        flow.setSubmitting,
+      );
+      if (action) setSubmitNavigationAction(action);
       return;
     }
 

@@ -14,6 +14,7 @@ import type {
   VoiceAgentSettingsSnapshot,
   ModelSelection,
   ServerProvider,
+  VoiceCallbackSettings,
 } from "@t3tools/contracts";
 import { AppText as Text, AppTextInput as TextInput } from "../../components/ui/AppText";
 import { AndroidScreenHeader } from "../../components/ui/AndroidScreenHeader";
@@ -94,6 +95,8 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
   const [busy, setBusy] = useState(false);
   const [instructions, setInstructions] = useState("");
   const [originalInstructions, setOriginalInstructions] = useState("");
+  const [callbacks, setCallbacks] = useState<VoiceCallbackSettings>({ autoCallback: false });
+  const [originalAutoCallback, setOriginalAutoCallback] = useState(false);
   const [providers, setProviders] = useState<ServerProvider[]>([]);
   const [modelSelection, setModelSelection] = useState<ModelSelection | null>(null);
   const [originalSelection, setOriginalSelection] = useState<ModelSelection | null>(null);
@@ -123,6 +126,8 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
         setDraft(data.config);
         setInstructions(settings.config.instructions.global);
         setOriginalInstructions(settings.config.instructions.global);
+        setCallbacks({ autoCallback: settings.config.autoCallback === true });
+        setOriginalAutoCallback(settings.config.autoCallback === true);
         setModelSelection(settings.config.modelSelection);
         setOriginalSelection(settings.config.modelSelection);
         setProviders(
@@ -145,14 +150,17 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
         Connect directly over HTTPS to change voice settings.
       </Text>
     );
+  const servicesChanged =
+    JSON.stringify(draft) !== JSON.stringify(snapshot?.config ?? null) || llmKey !== undefined;
   const changed =
-    JSON.stringify(draft) !== JSON.stringify(snapshot?.config ?? null) ||
+    servicesChanged ||
     instructions !== originalInstructions ||
-    JSON.stringify(modelSelection) !== JSON.stringify(originalSelection) ||
-    llmKey !== undefined;
+    callbacks.autoCallback !== originalAutoCallback ||
+    JSON.stringify(modelSelection) !== JSON.stringify(originalSelection);
   function change<K extends keyof VoiceAgentSettings>(key: K, value: VoiceAgentSettings[K]) {
     setDraft((c) => (c ? { ...c, [key]: value } : c));
   }
+  const servicesWritable = snapshot?.writable !== false;
   const field = (
     key: "llmUrl" | "llmModel" | "sttUrl" | "sttModel" | "ttsUrl" | "ttsModel" | "ttsVoice",
     label: string,
@@ -163,7 +171,7 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
       <TextInput
         accessibilityLabel={label}
         value={draft?.[key]}
-        editable={editable && !busy}
+        editable={editable && servicesWritable && !busy}
         autoCapitalize="none"
         autoCorrect={false}
         onChangeText={(value) => change(key, value)}
@@ -175,29 +183,34 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
     setBusy(true);
     setMessage("");
     try {
-      const r = await fetch(url("agent-settings"), {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify({ ...draft, ...(llmKey !== undefined ? { llmKey } : {}) }),
-      });
-      const data = (await r.json()) as VoiceAgentSettingsSnapshot & { error?: string };
-      if (!r.ok) throw Error(data.error || "Could not save settings.");
-      setSnapshot(data);
-      setDraft(data.config);
+      let restartRequired = !changed && (snapshot?.restartRequired ?? false);
+      if (servicesChanged) {
+        const r = await fetch(url("agent-settings"), {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ ...draft, ...(llmKey !== undefined ? { llmKey } : {}) }),
+        });
+        const data = (await r.json()) as VoiceAgentSettingsSnapshot & { error?: string };
+        if (!r.ok) throw Error(data.error || "Could not save settings.");
+        setSnapshot(data);
+        setDraft(data.config);
+        restartRequired = data.restartRequired;
+      }
       const global = await fetch(url("t3-global-settings"), {
         method: "PATCH",
         headers,
         body: JSON.stringify({
           instructions: { global: instructions },
           modelSelection,
+          ...callbacks,
         }),
       });
-      if (!global.ok)
-        throw Error("Service settings were saved, but instructions could not be saved.");
+      if (!global.ok) throw Error("Could not save conversation settings. Try again.");
       setOriginalInstructions(instructions);
+      setOriginalAutoCallback(callbacks.autoCallback);
       setOriginalSelection(modelSelection);
       setLlmKey(undefined);
-      if (data.restartRequired) {
+      if (restartRequired) {
         const restart = await fetch(url("agent-settings/apply"), { method: "POST", headers });
         if (!restart.ok)
           throw Error("Settings saved, but restart failed. Try Save and apply again.");
@@ -252,7 +265,7 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
               <VoiceSelect
                 label="API type"
                 value={draft.llmApiType}
-                disabled={busy}
+                disabled={busy || !servicesWritable}
                 options={[
                   { value: "responses", label: "OpenAI Responses" },
                   { value: "chat-completions", label: "OpenAI Chat Completions" },
@@ -272,16 +285,38 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
                     ? "Saved key · enter a new key to replace"
                     : "API key (optional for local servers)"
                 }
-                editable={!busy}
+                editable={servicesWritable && !busy}
                 className="text-base"
               />
               {snapshot?.llmKeyConfigured ? (
-                <Pressable disabled={busy} onPress={() => setLlmKey("")} className="py-3">
+                <Pressable
+                  disabled={busy || !servicesWritable}
+                  onPress={() => setLlmKey("")}
+                  className="py-3"
+                >
                   <Text className="text-foreground">Remove saved key</Text>
                 </Pressable>
               ) : null}
             </>
           )}
+          <View className="gap-2">
+            <View className="flex-row items-center justify-between gap-3">
+              <Text className="flex-1 text-sm font-t3-medium">
+                Oddzwaniaj automatycznie po zakończeniu zadania
+              </Text>
+              <Switch
+                accessibilityLabel="Oddzwaniaj automatycznie po zakończeniu zadania"
+                disabled={busy}
+                value={callbacks.autoCallback}
+                onValueChange={(autoCallback) => setCallbacks({ autoCallback })}
+              />
+            </View>
+            <Text className="text-sm text-foreground-secondary">
+              Po rozłączeniu rozmowy agent zadzwoni na zarejestrowany telefon z Androidem, kiedy
+              zadanie zlecone głosowo będzie gotowe. Wymaga włączonych powiadomień o połączeniach.
+              Podczas rozmowy wynik usłyszysz na bieżąco.
+            </Text>
+          </View>
           <View className="gap-2">
             <Text className="text-sm font-t3-medium">Agent instructions</Text>
             <TextInput
@@ -295,6 +330,12 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
               className="min-h-32 text-base"
             />
           </View>
+          {!servicesWritable ? (
+            <Text className="text-sm text-foreground-secondary">
+              Service configuration is read-only. Conversation and callback settings can still be
+              saved.
+            </Text>
+          ) : null}
           <Text className="pt-3 text-base font-t3-bold text-foreground">Speech recognition</Text>
           {field("sttModel", "STT model")}
           {field("sttUrl", "Transcription API URL")}
@@ -302,7 +343,7 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
           <VoiceSelect
             label="Speech synthesis"
             value={draft.ttsProvider}
-            disabled={busy}
+            disabled={busy || !servicesWritable}
             options={[
               { value: "elevenlabs", label: "ElevenLabs", detail: "Cloud" },
               { value: "breeze", label: "Breeze TTS 2", detail: "Local" },
@@ -349,7 +390,7 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
             <VoiceSelect
               label="Sample rate"
               value={draft.ttsSampleRate}
-              disabled={busy}
+              disabled={busy || !servicesWritable}
               options={([16000, 22050, 24000, 44100, 48000] as const).map((rate) => ({
                 value: rate,
                 label: `${rate} Hz`,
@@ -365,7 +406,7 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
               keyboardType="number-pad"
               value={String(draft.silenceMs)}
               onChangeText={(value) => change("silenceMs", Number(value))}
-              editable={!busy}
+              editable={servicesWritable && !busy}
               className="text-base"
             />
           </View>
@@ -375,7 +416,7 @@ function VoiceConfiguration({ environmentId }: { environmentId: EnvironmentId })
               accessibilityLabel="Allow interruptions"
               value={draft.interruptions}
               onValueChange={(value) => change("interruptions", value)}
-              disabled={busy}
+              disabled={busy || !servicesWritable}
             />
           </View>
           <Pressable

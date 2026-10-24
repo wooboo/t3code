@@ -96,6 +96,7 @@ it.each([
       stop,
       start: vi.fn(),
       toggleMute: vi.fn(),
+      refreshHistory: vi.fn(),
       setAudioRoute: vi.fn(),
     } as unknown as VoiceCallHandle;
     await act(() => {
@@ -133,6 +134,7 @@ it("appends resumed speech in the existing bubble and separates the next exchang
     stop: vi.fn(),
     start: vi.fn(),
     toggleMute: vi.fn(),
+    refreshHistory: vi.fn(),
     setAudioRoute: vi.fn(),
   } as unknown as VoiceCallHandle;
   const onClose = vi.fn();

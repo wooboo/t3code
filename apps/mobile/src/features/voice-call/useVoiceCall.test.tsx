@@ -80,6 +80,7 @@ vi.mock("livekit-client", () => ({
   },
 }));
 vi.mock("react-native", () => ({
+  AppState: { addEventListener: () => ({ remove: vi.fn() }) },
   Platform: { OS: "android", Version: 30 },
   PermissionsAndroid: {
     request: async () => "granted",

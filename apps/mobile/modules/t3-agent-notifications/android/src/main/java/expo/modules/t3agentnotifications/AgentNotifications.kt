@@ -24,7 +24,7 @@ class AgentMessagingService : ExpoFirebaseMessagingService() {
     VoiceFcmPush.rotated(this, token)
   }
   override fun onMessageReceived(remoteMessage: RemoteMessage) {
-    if (remoteMessage.data["t3_kind"] == "voice_call") {
+    if (remoteMessage.data["t3_kind"] in setOf("voice_call", "voice_result")) {
       VoiceFcmPush.receive(this, remoteMessage.data)
       return
     }

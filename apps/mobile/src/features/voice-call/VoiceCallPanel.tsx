@@ -224,6 +224,7 @@ export function VoiceCallPanel(props: {
               accessibilityRole="button"
               accessibilityState={{ expanded: historyVisible }}
               onPress={() => {
+                if (!historyVisible) call.refreshHistory();
                 scrollY.value = 0;
                 transcriptHeight.current = 0;
                 viewportHeight.current = 0;
