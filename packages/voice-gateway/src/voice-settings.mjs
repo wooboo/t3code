@@ -9,6 +9,7 @@ export const VOICE_LANGUAGE_INSTRUCTIONS =
 
 export const defaultVoiceSettings = () => ({
   modelSelection: null,
+  autoCallback: false,
   instructions: {
     global:
       "Odpowiadaj w języku ostatniej wypowiedzi użytkownika, krótko i naturalnie. Zadania dotyczące projektu deleguj do agenta wykonawczego. Nie udawaj dostępu do plików ani wyników narzędzi.",
@@ -29,6 +30,11 @@ export function validateVoicePatch(patch) {
     throw Error("Nieprawidłowe ustawienia");
   if (patch.cleanup !== undefined) throw Error("Czyszczenie transkrypcji zostało usunięte");
   const result = {};
+  if (patch.autoCallback !== undefined) {
+    if (typeof patch.autoCallback !== "boolean")
+      throw Error("Nieprawidłowe ustawienie oddzwaniania");
+    result.autoCallback = patch.autoCallback;
+  }
   if (patch.modelSelection !== undefined) {
     const m = patch.modelSelection;
     if (
@@ -99,6 +105,7 @@ export class VoiceSettingsStore {
     const defaults = defaultVoiceSettings();
     return {
       ...defaults,
+      autoCallback: saved.global?.autoCallback === true,
       ...(saved.global?.modelSelection !== undefined
         ? { modelSelection: saved.global.modelSelection }
         : {}),

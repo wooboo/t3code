@@ -32,3 +32,22 @@ export function groupVoiceTranscript<T extends VoiceTranscriptEntry>(entries: re
   }
   return groups;
 }
+
+/** A refresh is authoritative for old entries; keep only changes received while it was in flight. */
+export function mergeVoiceHistory<T extends { id: string }>(
+  server: readonly T[],
+  current: readonly T[],
+  atRequestStart: readonly T[],
+  limit = 100,
+): T[] {
+  const previous = new Map(atRequestStart.map((message) => [message.id, message]));
+  const live = new Map(current.map((message) => [message.id, message]));
+  const serverIds = new Set(server.map((message) => message.id));
+  return [
+    ...server.map((message) => {
+      const updated = live.get(message.id);
+      return updated && updated !== previous.get(message.id) ? updated : message;
+    }),
+    ...current.filter((message) => !previous.has(message.id) && !serverIds.has(message.id)),
+  ].slice(-limit);
+}

@@ -14,6 +14,7 @@ export type VoiceAgentSettings = {
   interruptions: boolean;
 };
 export type VoiceAgentSettingsSnapshot = {
+  writable?: boolean;
   config: VoiceAgentSettings;
   active: VoiceAgentSettings;
   restartRequired: boolean;

@@ -213,6 +213,17 @@ export async function createT3VoiceGateway({
           }),
           normalizeEnvironmentId: async (id) => id || targets.localId(),
           getSettings,
+          getAutoCallback: (ownerId) => settingsStore.get(ownerId, "", "").autoCallback,
+          recordResult: (target, result, id) =>
+            conversationSync.record({
+              ownerId: target.ownerId,
+              sessionId: target.voiceSessionId,
+              id,
+              role: "assistant",
+              content: result.content,
+              source: "agent-result",
+              taskId: id,
+            }),
           onTranscript: (binding, entry) =>
             conversationSync.record({
               ownerId: binding.ownerId,

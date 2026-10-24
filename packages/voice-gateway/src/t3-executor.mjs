@@ -4,7 +4,14 @@ import { dispatchT3Command } from "./t3-rpc.mjs";
 
 /** Bridge voice work to protocol-v2 threads and their run ownership. */
 export class T3VoiceExecutor {
-  constructor({ origin, token, fetchImpl = fetch, wait = NodeTimersPromises.setTimeout }) {
+  constructor({
+    origin,
+    token,
+    fetchImpl = fetch,
+    wait = NodeTimersPromises.setTimeout,
+    now = Date.now,
+    completionTimeoutMs = 10 * 60_000,
+  }) {
     const url = new URL(origin);
     if (!["http:", "https:"].includes(url.protocol))
       throw new Error("T3 requires an HTTP or HTTPS endpoint");
@@ -12,7 +19,8 @@ export class T3VoiceExecutor {
     this.token = token;
     this.fetch = fetchImpl;
     this.wait = wait;
-    this.locks = new Set();
+    this.now = now;
+    this.completionTimeoutMs = completionTimeoutMs;
     this.admissions = new Map();
     this.enabled = true;
     this.protocol = "t3";
@@ -132,8 +140,6 @@ export class T3VoiceExecutor {
     });
     this.admissions.set(id, admission);
     await previousAdmission;
-    const ownsWork = !this.locks.has(id);
-    if (ownsWork) this.locks.add(id);
     const releaseAdmission = () => {
       if (this.admissions.get(id) === admission) this.admissions.delete(id);
       release();
@@ -145,11 +151,6 @@ export class T3VoiceExecutor {
       const before = beforeProjection.thread;
       if (before.deletedAt || before.archivedAt)
         throw new Error("Wątek jest usunięty lub zarchiwizowany");
-      const threadBusy =
-        !ownsWork ||
-        beforeProjection.runs.some((run) =>
-          ["preparing", "queued", "starting", "running", "waiting"].includes(run.status),
-        );
       const messageId = NodeCrypto.randomUUID();
       await this.dispatchCommand(
         {
@@ -170,32 +171,25 @@ export class T3VoiceExecutor {
         signal,
       );
       releaseAdmission();
-      // T3 routes follow-ups through the provider's normal steering/queue path.
-      // A busy turn belongs to its original caller; report acceptance instead of
-      // waiting for (or taking cancellation ownership of) that turn's result.
-      if (threadBusy) {
-        return {
-          content:
-            "Przekazano instrukcję do aktywnego wątku T3. Wynik dalszej pracy sprawdzisz w czacie.",
-        };
-      }
-      const deadline = Date.now() + 10 * 60_000;
-      while (Date.now() < deadline) {
+      const deadline = this.now() + this.completionTimeoutMs;
+      while (this.now() < deadline) {
         const projection = await this.threadProjection(id, signal);
+        if (projection.thread.deletedAt || projection.thread.archivedAt)
+          throw new Error("Wątek jest usunięty lub zarchiwizowany");
         const index = projection.messages.findIndex((m) => m.id === messageId);
         if (index >= 0) {
-          const following = projection.messages.slice(index + 1);
-          if (following.some((m) => m.role === "user"))
-            return {
-              content: "Wątek otrzymał dalsze instrukcje. Praca trwa; wynik sprawdzisz w T3.",
-            };
-          const run = projection.runs.find((run) => run.userMessageId === messageId);
+          // Steered messages belong to an existing run; queued messages receive their own.
+          // Later user messages never transfer observation or cancellation ownership.
+          const message = projection.messages[index];
+          const run =
+            projection.runs.find((run) => run.userMessageId === messageId) ??
+            projection.runs.find((run) => run.id === message.runId);
           if (run) {
-            ownedRunId = run.id;
+            if (run.userMessageId === messageId) ownedRunId = run.id;
             if (["failed", "interrupted", "cancelled"].includes(run.status))
               throw new Error(`T3: ${run.status}`);
             if (run.status === "completed") {
-              const results = following.filter(
+              const results = projection.messages.filter(
                 (message) =>
                   message.runId === run.id &&
                   message.role === "assistant" &&
@@ -203,8 +197,11 @@ export class T3VoiceExecutor {
                   message.text,
               );
               if (results.length)
-                return { content: results.map((message) => message.text).join("\n\n") };
-              return { content: "Zadanie zakończone. Wynik sprawdzisz w T3 Code." };
+                return {
+                  content: results.map((message) => message.text).join("\n\n"),
+                  runId: run.id,
+                };
+              return { content: "Zadanie zakończone. Wynik sprawdzisz w T3 Code.", runId: run.id };
             }
           }
         }
@@ -224,7 +221,6 @@ export class T3VoiceExecutor {
       throw error;
     } finally {
       releaseAdmission();
-      if (ownsWork) this.locks.delete(id);
     }
   }
 }

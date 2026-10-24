@@ -1,5 +1,11 @@
 import * as Schema from "effect/Schema";
 
+/** Owner-wide opt-in, evaluated again when delegated voice work finishes. */
+export const VoiceCallbackSettings = Schema.Struct({
+  autoCallback: Schema.Boolean,
+});
+export type VoiceCallbackSettings = typeof VoiceCallbackSettings.Type;
+
 export const CallUserInput = Schema.Struct({
   reason: Schema.String.check(Schema.isTrimmed(), Schema.isNonEmpty(), Schema.isMaxLength(2000)),
   context: Schema.optional(Schema.String.check(Schema.isMaxLength(8000))),
