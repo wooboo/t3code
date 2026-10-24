@@ -92,6 +92,10 @@ export function VoicePanel({
   environmentId?: string | undefined;
 }) {
   const globalSettings = useVoiceSettings("__global__", false, environmentId);
+  const { refreshHistory } = voice;
+  useEffect(() => {
+    refreshHistory();
+  }, [refreshHistory]);
   const termsData = globalSettings.data;
   const terms = useMemo(() => termsData?.config.terms ?? [], [termsData]);
   const transcript = useMemo(

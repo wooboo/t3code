@@ -29,6 +29,27 @@ function fixture(t, fetcher) {
   return { send, calls };
 }
 NodeTest.test(
+  "voice results use a normal long-lived data notification without conversation content",
+  async (t) => {
+    const requests = [];
+    const { calls } = fixture(t, async (_url, init) => {
+      requests.push(JSON.parse(init.body).message);
+      return Response.json({ name: "projects/voice-project/messages/result" });
+    });
+    await calls.notifyResult(
+      { ownerId: "owner", environmentId: "env", threadId: "thread" },
+      "agent:result-1",
+    );
+    NodeAssert.equal(requests[0].android.ttl, "86400s");
+    NodeAssert.equal(requests[0].data.t3_kind, "voice_result");
+    NodeAssert.equal(requests[0].data.messageId, "agent:result-1");
+    NodeAssert.equal(requests[0].data.threadId, "thread");
+    NodeAssert.equal(requests[0].data.hostEnvironmentId, "host");
+    NodeAssert.equal(requests[0].notification, undefined);
+    NodeAssert.equal(Object.keys(calls.state.calls).length, 0);
+  },
+);
+NodeTest.test(
   "FCM sends a high-priority, short-lived data invitation without conversation content",
   async (t) => {
     const requests = [];

@@ -20,6 +20,7 @@ export {
 } from "./transcription.ts";
 export {
   groupVoiceTranscript,
+  mergeVoiceHistory,
   applyTermReplacements,
   type VoiceTermReplacement,
 } from "../voiceTranscript.ts";

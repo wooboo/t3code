@@ -104,10 +104,12 @@ object VoiceUnifiedPush {
     if (!message.decrypted || message.content.size > 4096 || !prefs(context).getBoolean("enabled:$instance", false)) return
     try {
       val payload = JSONObject(String(message.content, Charsets.UTF_8))
-      if (payload.optString("t3_kind") != "voice_call" || payload.optString("hostEnvironmentId") != instance) return
-      VoiceCallNotifications.receive(context, mapOf(
-        "callId" to payload.getString("callId"), "expiresAt" to payload.getString("expiresAt"),
-        "hostEnvironmentId" to instance))
+      if (payload.optString("hostEnvironmentId") != instance) return
+      val data = payload.keys().asSequence().associateWith { payload.getString(it) }
+      when (payload.optString("t3_kind")) {
+        "voice_call" -> VoiceCallNotifications.receive(context, data)
+        "voice_result" -> VoiceCallNotifications.receiveResult(context, data)
+      }
     } catch (_: Exception) { /* Ignore invalid or unrelated messages. */ }
   }
 }

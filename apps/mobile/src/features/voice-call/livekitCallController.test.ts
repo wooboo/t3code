@@ -26,6 +26,16 @@ function fixture() {
   const controller = new LivekitCallController(deps);
   return { controller, deps, room, disconnect, microphone, fetcher, stopAudio };
 }
+it("refreshes offline voice results in history order without duplicating earlier messages", async () => {
+  const f = fixture();
+  const original = { id: "first", role: "user", content: "Wykonaj zadanie" };
+  const result = { id: "agent:result", role: "assistant", content: "Zadanie gotowe" };
+  f.fetcher.mockResolvedValueOnce(Response.json({ messages: [original] }));
+  await f.controller.loadHistory(new AbortController().signal);
+  f.fetcher.mockResolvedValueOnce(Response.json({ messages: [original, result] }));
+  await f.controller.loadHistory(new AbortController().signal);
+  expect(f.controller.state.messages).toEqual([original, result]);
+});
 it("releases a late audio session after hangup without connecting or publishing", async () => {
   const f = fixture();
   let grant!: () => void;
@@ -164,4 +174,49 @@ it("room deletion ends the call even if the final data event is lost", async () 
   expect(f.controller.state.active).toBe(false);
   expect(f.controller.state.error).toBe("");
   expect(f.stopAudio).toHaveBeenCalledOnce();
+});
+
+it("treats refreshed history as authoritative and bounds messages received during fetch", async () => {
+  const f = fixture();
+  const old = Array.from({ length: 100 }, (_, i) => ({
+    id: String(i),
+    role: "assistant",
+    content: String(i),
+  }));
+  f.controller.state = { ...f.controller.state, messages: old };
+  let respond!: (response: Response) => void;
+  f.fetcher.mockImplementationOnce(
+    () =>
+      new Promise<Response>((resolve) => {
+        respond = resolve;
+      }),
+  );
+  const loading = f.controller.loadHistory(new AbortController().signal);
+  const live = { id: "live", role: "assistant", content: "during refresh" };
+  f.controller.state = { ...f.controller.state, messages: [...old, live] };
+  const server = [...old.slice(1), { id: "100", role: "assistant", content: "result" }];
+  respond(Response.json({ messages: server }));
+  await loading;
+  expect(f.controller.state.messages).toEqual([...server.slice(1), live]);
+  f.fetcher.mockResolvedValueOnce(Response.json({ messages: [] }));
+  await f.controller.loadHistory(new AbortController().signal);
+  expect(f.controller.state.messages).toEqual([]);
+});
+
+it("ignores an older history response arriving after the latest refresh", async () => {
+  const f = fixture();
+  let respond!: (response: Response) => void;
+  f.fetcher.mockImplementationOnce(
+    () =>
+      new Promise<Response>((resolve) => {
+        respond = resolve;
+      }),
+  );
+  const old = f.controller.loadHistory(new AbortController().signal);
+  const message = { id: "latest", role: "assistant", content: "latest" };
+  f.fetcher.mockResolvedValueOnce(Response.json({ messages: [message] }));
+  await f.controller.loadHistory(new AbortController().signal);
+  respond(Response.json({ messages: [] }));
+  await old;
+  expect(f.controller.state.messages).toEqual([message]);
 });

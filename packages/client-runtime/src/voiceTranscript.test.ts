@@ -1,9 +1,10 @@
 import { expect, it } from "vite-plus/test";
 import {
   applyTermReplacements,
+  mergeVoiceHistory,
   groupVoiceTranscript,
   type VoiceTermReplacement,
-} from "./voiceTranscript";
+} from "./voiceTranscript.ts";
 
 it("appends new VAD items to a stable bubble until an assistant reply", () => {
   const first = { id: "user:a", role: "user", content: "Sprawdź plik" };
@@ -90,4 +91,19 @@ it("rewrites misconverted phrases for the displayed transcript", () => {
   );
   expect(applyTermReplacements("serio kioxia", terms)).toBe("serio KIOXIA");
   expect(applyTermReplacements("nic", [])).toBe("nic");
+});
+
+it("replaces retired history entries and keeps only live arrivals during refresh within the limit", () => {
+  const old = Array.from({ length: 100 }, (_, i) => ({ id: String(i), content: String(i) }));
+  const server = [...old.slice(1), { id: "100", content: "result" }];
+  expect(mergeVoiceHistory(server, old, old)).toEqual(server);
+  expect(mergeVoiceHistory([], old, old)).toEqual([]);
+  const live = { id: "101", content: "live" };
+  expect(mergeVoiceHistory(server, [...old, live], old)).toEqual([...server.slice(1), live]);
+});
+
+it("preserves a transcript correction received while history was loading", () => {
+  const old = { id: "message", content: "partial" };
+  const corrected = { ...old, content: "final" };
+  expect(mergeVoiceHistory([old], [corrected], [old])).toEqual([corrected]);
 });

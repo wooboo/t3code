@@ -20,6 +20,29 @@ afterEach(async () => {
   vi.unstubAllEnvs();
 });
 
+it("refreshes results completed offline without starting a call and keeps history ordered", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "window",
+    Object.assign(new EventTarget(), { location: { origin: "https://voice.test" } }),
+  );
+  const original = { id: "user:1", role: "user", content: "Wykonaj zadanie" };
+  const result = { id: "agent:result", role: "assistant", content: "Zadanie gotowe" };
+  const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ messages: [original] }));
+  vi.stubGlobal("fetch", fetcher);
+  await act(() => {
+    root = create(<Probe threadId="thread" />);
+  });
+  expect(voice.transcript).toEqual([original]);
+  fetcher.mockResolvedValueOnce(Response.json({ messages: [original, result] }));
+  await act(() => voice.refreshHistory());
+  expect(voice.transcript).toEqual([original, result]);
+  expect(voice.active).toBe(false);
+  fetcher.mockResolvedValueOnce(Response.json({ messages: [original, result] }));
+  await act(() => window.dispatchEvent(new Event("focus")));
+  expect(voice.transcript).toEqual([original, result]);
+});
+
 async function pendingMicrophone() {
   vi.stubEnv("VITE_VOICE_FRONT_ORIGIN", "/voice/");
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -135,4 +158,53 @@ describe("pipeline stats", () => {
     expect(byLabel.get("TTS first byte")).toMatchObject({ ms: 150 });
     expect(byLabel.get("Vad")).toBeUndefined();
   });
+});
+
+it("does not resurrect messages removed by server retention on refresh", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "window",
+    Object.assign(new EventTarget(), { location: { origin: "https://voice.test" } }),
+  );
+  const old = Array.from({ length: 100 }, (_, i) => ({
+    id: String(i),
+    role: "assistant",
+    content: String(i),
+  }));
+  const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ messages: old }));
+  vi.stubGlobal("fetch", fetcher);
+  await act(() => {
+    root = create(<Probe threadId="thread" />);
+  });
+  const server = [...old.slice(1), { id: "100", role: "assistant", content: "new" }];
+  fetcher.mockResolvedValueOnce(Response.json({ messages: server }));
+  await act(() => voice.refreshHistory());
+  expect(voice.transcript).toEqual(server);
+  fetcher.mockResolvedValueOnce(Response.json({ messages: [] }));
+  await act(() => voice.refreshHistory());
+  expect(voice.transcript).toEqual([]);
+});
+
+it("ignores an older refresh even when fetch does not honor its abort signal", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "window",
+    Object.assign(new EventTarget(), { location: { origin: "https://voice.test" } }),
+  );
+  let respond!: (response: Response) => void;
+  const fetcher = vi.fn().mockImplementationOnce(
+    () =>
+      new Promise<Response>((resolve) => {
+        respond = resolve;
+      }),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  await act(() => {
+    root = create(<Probe threadId="thread" />);
+  });
+  const message = { id: "latest", role: "assistant", content: "latest" };
+  fetcher.mockResolvedValueOnce(Response.json({ messages: [message] }));
+  await act(() => voice.refreshHistory());
+  await act(() => respond(Response.json({ messages: [] })));
+  expect(voice.transcript).toEqual([message]);
 });

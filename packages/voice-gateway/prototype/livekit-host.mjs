@@ -3,7 +3,13 @@ import * as NodeChildProcess from "node:child_process";
 
 // The RTC native addon owns process-global callbacks. Keep it outside T3's
 // gateway worker so closing a call cannot invalidate callbacks in that worker.
-export async function startLivekitPrototype({ executor, onClose, onTranscript, ...options }) {
+export async function startLivekitPrototype({
+  executor,
+  onClose,
+  onTranscript,
+  onConnectionChange,
+  ...options
+}) {
   const child = NodeChildProcess.fork(new URL("./livekit-process.mjs", import.meta.url), [], {
     execArgv: [],
     stdio: ["ignore", "inherit", "inherit", "ipc"],
@@ -15,6 +21,7 @@ export async function startLivekitPrototype({ executor, onClose, onTranscript, .
   const close = async () => {
     if (!closed) {
       closed = true;
+      onConnectionChange?.(false);
       if (child.connected) child.send({ type: "close" });
       stopTimer = setTimeout(() => child.kill("SIGKILL"), 5000);
     }
@@ -25,9 +32,14 @@ export async function startLivekitPrototype({ executor, onClose, onTranscript, .
     for (const pending of notifications.values()) pending.reject(Error("Voice process exited"));
     notifications.clear();
     clearTimeout(stopTimer);
+    onConnectionChange?.(false);
     onClose();
   });
   child.on("message", (message) => {
+    if (message.type === "connection" && !closed) {
+      onConnectionChange?.(message.connected);
+      return;
+    }
     if (message.type === "notified") {
       const pending = notifications.get(message.id);
       if (pending) {
@@ -52,7 +64,8 @@ export async function startLivekitPrototype({ executor, onClose, onTranscript, .
         () => ({ error: "Sprawdź zadanie w T3." }),
       )
       .then((result) => {
-        if (child.connected) child.send({ type: "result", id: message.id, ...result });
+        if (!closed && child.connected)
+          child.send({ type: "result", id: message.id, ...result }, () => {});
       });
   });
   try {

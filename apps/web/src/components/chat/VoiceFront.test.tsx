@@ -42,6 +42,7 @@ function voice(
     start: async () => {},
     stop: () => {},
     toggleMute: () => {},
+    refreshHistory: () => {},
     setDeviceId: () => {},
     toggleSettings: () => {},
   };

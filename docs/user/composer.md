@@ -167,6 +167,22 @@ Stashes containing uploaded files must be restored in their original environment
 Those files are retained for 24 hours. After an upload expires, restore the prompt
 and use **Attach again** or remove the missing file before sending.
 
+## Automatic voice callbacks
+
+In **Settings → Voice**, enable **Oddzwaniaj automatycznie po zakończeniu zadania**
+to receive a call when work delegated during a voice conversation finishes after
+you hang up. This setting is off by default and applies to your voice tasks on
+that voice server. You can change it from web, desktop, or mobile.
+
+Register your Android phone under **Settings → Voice → Oddzwanianie** and allow
+call notifications. Answer the call to hear the result in its original thread.
+If you stay connected, the agent shares the result in the current conversation.
+Callbacks do not interrupt another thread's call or retry unanswered invitations;
+the result remains available in the thread and voice history. When you are no
+longer connected, a separate result notification is sent to your registered
+Android phone even if automatic callbacks are off or you do not answer the call.
+Reading the result does not require starting another call.
+
 ## Voice input on iPhone
 
 On supported iPhones with iOS 26 or later, use the composer's microphone to record,

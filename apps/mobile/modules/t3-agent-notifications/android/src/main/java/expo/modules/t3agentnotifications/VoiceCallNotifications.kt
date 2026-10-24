@@ -28,6 +28,48 @@ object VoiceCallNotifications {
     NotificationManagerCompat.from(context).cancel(ID)
   }
 
+  fun receiveResult(context: Context, data: Map<String, String>) {
+    val createdAt = data["createdAt"]?.toLongOrNull() ?: return
+    if (System.currentTimeMillis() - createdAt !in -60_000L..86_400_000L) return
+    val messageId = data["messageId"]?.takeIf { it.matches(Regex("[a-zA-Z0-9:-]{1,128}")) } ?: return
+    val host = data["hostEnvironmentId"]?.takeIf { it.isNotBlank() && it.length <= 4096 } ?: return
+    val environment = data["environmentId"]?.takeIf { it.isNotBlank() && it.length <= 4096 } ?: return
+    val thread = data["threadId"]?.takeIf { it.isNotBlank() && it.length <= 4096 } ?: return
+    val prefs = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
+    val scheme = prefs.getString("scheme", null) ?: return
+    val key = "$host:$messageId"
+    val seen = prefs.getString("seenResults", "").orEmpty().split('\n')
+    if (key in seen) return
+    val manager = NotificationManagerCompat.from(context)
+    if (!manager.areNotificationsEnabled()) return
+    val channel = "voice-results"
+    if (Build.VERSION.SDK_INT >= 26) {
+      context.getSystemService(NotificationManager::class.java).createNotificationChannel(
+        NotificationChannel(channel, "Voice task results", NotificationManager.IMPORTANCE_DEFAULT))
+    }
+    val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
+    intent.action = Intent.ACTION_VIEW
+    intent.data = Uri.parse("$scheme:///threads/${Uri.encode(environment)}/${Uri.encode(thread)}")
+    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    val notificationId = key.hashCode()
+    val open = PendingIntent.getActivity(context, notificationId, intent,
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    val notification = NotificationCompat.Builder(context, channel)
+      .setSmallIcon(android.R.drawable.sym_action_chat)
+      .setContentTitle("Wynik zadania głosowego jest gotowy")
+      .setContentText("Otwórz wątek, aby przeczytać wynik. Znajdziesz go również w historii voice.")
+      .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+      .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+      .setContentIntent(open)
+      .setAutoCancel(true)
+      .setOnlyAlertOnce(true)
+      .build()
+    try {
+      manager.notify("voice-result", notificationId, notification)
+      prefs.edit().putString("seenResults", (seen.takeLast(63) + key).joinToString("\n")).apply()
+    } catch (_: SecurityException) { /* Notification permission can be revoked independently. */ }
+  }
+
   fun receive(context: Context, data: Map<String, String>) {
     val expiresAt = data["expiresAt"]?.toLongOrNull() ?: return
     val remaining = expiresAt - System.currentTimeMillis()

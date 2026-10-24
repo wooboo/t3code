@@ -3,7 +3,7 @@ import { getVoiceAudio } from "../../native/voiceAudio";
 import { useVoiceHost } from "./useVoiceHost";
 import * as Option from "effect/Option";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PermissionsAndroid, Platform } from "react-native";
+import { AppState, PermissionsAndroid, Platform } from "react-native";
 import { useSharedValue, type SharedValue } from "react-native-reanimated";
 import { type VoiceAudioRoute, type VoiceCallState } from "./voiceCallController";
 import { useFocusEffect } from "@react-navigation/native";
@@ -24,6 +24,7 @@ export type VoiceCallHandle = {
   unsupportedReason: string | null;
   start: () => Promise<void> | undefined;
   stop: () => void;
+  refreshHistory: () => void;
   toggleMute: () => Promise<void> | undefined;
   setAudioRoute: (route: VoiceAudioRoute) => Promise<void>;
 };
@@ -185,8 +186,13 @@ export function useVoiceCall(input: {
       : null;
     controllerRef.current = controller;
     void controller.loadHistory(lifecycleAbort.signal).catch(() => undefined);
+    const foregroundSubscription = AppState.addEventListener("change", (state) => {
+      if (state === "active")
+        void controller.loadHistory(lifecycleAbort.signal).catch(() => undefined);
+    });
     return () => {
       disposed = true;
+      foregroundSubscription.remove();
       routeSubscription?.remove();
       stopSubscription?.remove();
       lifecycleAbort.abort();
@@ -213,6 +219,9 @@ export function useVoiceCall(input: {
     ),
   );
   return {
+    refreshHistory: () => {
+      void controllerRef.current?.loadHistory(AbortSignal.timeout(10000)).catch(() => undefined);
+    },
     environmentId: input.environmentId,
     hostEnvironmentId,
     state,

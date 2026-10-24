@@ -110,4 +110,27 @@ export class IncomingCalls {
       };
     }
   }
+
+  async notifyResult(target, messageId) {
+    const device = this.state.devices[target.ownerId];
+    if (!this.send || !device || (this.send.supports && !this.send.supports(device))) return;
+    try {
+      await this.send(
+        device,
+        {
+          messageId,
+          environmentId: target.environmentId,
+          threadId: target.threadId,
+          createdAt: String(this.now()),
+        },
+        { kind: "voice_result", ttlSeconds: 86400 },
+      );
+    } catch (error) {
+      if ([404, 410].includes(error?.status) && this.state.devices[target.ownerId] === device) {
+        delete this.state.devices[target.ownerId];
+        this.save();
+      }
+      console.warn("[voice-result] Could not confirm notification delivery.");
+    }
+  }
 }

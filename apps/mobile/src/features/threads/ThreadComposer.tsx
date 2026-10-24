@@ -111,14 +111,12 @@ import { useComposerCommandMenu } from "./use-composer-command-menu";
 import {
   ComposerDictationCancelAction,
   ComposerDictationDraftContent,
-  ComposerDictationPrimaryAction,
-  ComposerDictationStartAction,
   ComposerDictationStatus,
   ComposerDictationToolbar,
 } from "../voice-input/ComposerDictationControl";
 import { useVoiceInputController } from "../voice-input/useVoiceInputController";
 import { resolveVoiceComposerPresentation } from "../voice-input/voiceInputPresentation";
-import { VoiceCallPanel } from "../voice-call/VoiceCallPanel";
+import { VoiceComposerControls, useVoiceComposerCall } from "../voice-call/VoiceComposerControls";
 import { VoiceEnvironmentContext } from "../voice-call/VoiceEnvironmentContext";
 import type { VoiceCallHandle } from "../voice-call/useVoiceCall";
 import {
@@ -476,12 +474,13 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
     onChangeDraftMessage: (text) => setComposerDraftText(composerDraftKey, text),
     onChangeSelection: composerMenu.onSelectionChange,
   });
-  const [voiceCallOpen, setVoiceCallOpen] = useState(props.initialVoiceCallOpen ?? false);
-  const voiceCallBlocksText =
-    props.voiceCall?.state.active === true && !props.voiceCall.state.muted;
-  useEffect(() => {
-    if (voiceCallBlocksText) inputRef.current?.blur();
-  }, [inputRef, voiceCallBlocksText]);
+  const composerCall = useVoiceComposerCall({
+    call: props.voiceCall,
+    initiallyOpen: props.initialVoiceCallOpen ?? false,
+    editorRef: inputRef,
+    dictationBusy: voiceInput.isBusy,
+  });
+  const voiceCallBlocksText = composerCall.blocksText;
   const voicePresentation = resolveVoiceComposerPresentation(
     voiceInput.state,
     voiceInput.elapsedSeconds,
@@ -1033,25 +1032,10 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             ) : null}
             {!isExpanded ? (
               <View className="flex-row items-center">
-                {props.voiceCall && Platform.OS === "android" ? (
-                  <ComposerActionButton
-                    accessibilityLabel={
-                      props.voiceCall.state.active
-                        ? "Rozmowa głosowa aktywna — otwórz panel"
-                        : "Otwórz panel głosu"
-                    }
-                    icon={props.voiceCall.state.muted ? "mic.slash" : "mic"}
-                    variant={props.voiceCall.state.active ? "danger" : "primary"}
-                    onPress={() => setVoiceCallOpen(true)}
-                  />
-                ) : null}
-                <ComposerDictationStartAction
-                  state={voiceInput.state}
-                  isAvailable={voiceInput.isAvailable}
-                  onStart={() => {
-                    if (!props.voiceCall?.state.active) void voiceInput.start();
-                  }}
-                  onCancel={voiceInput.cancel}
+                <VoiceComposerControls
+                  call={composerCall}
+                  dictation={voiceInput}
+                  expanded={false}
                 />
                 {showStopAction ? (
                   <ComposerActionButton
@@ -1140,26 +1124,10 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
                   </View>
                 )}
                 <View className="shrink-0 flex-row items-center">
-                  {props.voiceCall && Platform.OS === "android" ? (
-                    <ComposerActionButton
-                      accessibilityLabel={
-                        props.voiceCall.state.active
-                          ? `Rozmowa głosowa aktywna: ${props.voiceCall.state.muted ? "mikrofon wyciszony" : props.voiceCall.state.status}`
-                          : "Otwórz panel głosu"
-                      }
-                      icon={props.voiceCall.state.muted ? "mic.slash" : "mic"}
-                      variant={props.voiceCall.state.active ? "danger" : "primary"}
-                      onPress={() => setVoiceCallOpen((open) => !open)}
-                    />
-                  ) : null}
-                  <ComposerDictationPrimaryAction
-                    state={voiceInput.state}
-                    presentation={voicePresentation}
-                    isAvailable={voiceInput.isAvailable}
-                    disabled={props.voiceCall?.state.active === true}
-                    onStart={voiceInput.start}
-                    onConfirm={voiceInput.stop}
-                    onCancel={voiceInput.cancel}
+                  <VoiceComposerControls
+                    call={composerCall}
+                    dictation={voiceInput}
+                    expanded={true}
                   />
                   {showStopAction ? (
                     <ComposerActionButton
@@ -1182,13 +1150,7 @@ export const ThreadComposer = memo(function ThreadComposer(props: ThreadComposer
             </ComposerDictationToolbar>
           </Animated.View>
         </ComposerSurface>
-        {props.voiceCall && voiceCallOpen ? (
-          <VoiceCallPanel
-            call={props.voiceCall}
-            canStart={!voiceInput.isBusy}
-            onClose={() => setVoiceCallOpen(false)}
-          />
-        ) : null}
+        {composerCall.panel}
 
         {props.connectionState === "connected" && !props.canOperateThread ? (
           <Text className="pt-2 text-xs text-foreground-muted">
