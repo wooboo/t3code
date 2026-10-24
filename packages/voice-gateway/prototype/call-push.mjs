@@ -48,17 +48,17 @@ export function createCallPush(file, fetcher = fetch) {
       flag: "wx",
     });
   const keys = JSON.parse(NodeFS.readFileSync(file, "utf8"));
-  const send = async (device, invitation) => {
+  const send = async (device, invitation, { kind = "voice_call", ttlSeconds = 45 } = {}) => {
     const { subscription } = validateCallbackDevice(device);
     const details = webpush.generateRequestDetails(
       subscription,
       JSON.stringify({
-        t3_kind: "voice_call",
+        t3_kind: kind,
         hostEnvironmentId: device.hostEnvironmentId,
         ...invitation,
       }),
       {
-        TTL: 45,
+        TTL: ttlSeconds,
         urgency: "high",
         contentEncoding: "aes128gcm",
         vapidDetails: { subject: "https://t3.codes", ...keys },

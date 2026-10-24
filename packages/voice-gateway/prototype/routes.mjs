@@ -1,4 +1,5 @@
-import { callUser, voiceCallKey } from "./call-user.mjs";
+import { voiceCallKey } from "./call-user.mjs";
+import { VoiceCallService } from "../src/voice-call-service.mjs";
 import { mountAgentSettings } from "./agent-settings.mjs";
 import * as NodeURL from "node:url";
 import * as NodeModule from "node:module";
@@ -22,11 +23,13 @@ export function installVoicePrototype(
     onTranscript,
     resolveThread,
     normalizeEnvironmentId = async (id) => id,
+    getAutoCallback = () => false,
+    recordResult,
   },
 ) {
   mountAgentSettings(app);
-  const sessions = new Map();
-  const starting = new Set();
+  const calls = new VoiceCallService({ incoming, getAutoCallback, recordResult });
+  const { sessions, starting } = calls;
   const settings = livekitPrototypeConfig();
   const staticFile = (path) => (_req, res) =>
     res.sendFile(NodeURL.fileURLToPath(new URL(path, import.meta.url)));
@@ -82,12 +85,23 @@ export function installVoicePrototype(
       try {
         const binding = resolved.binding ?? (await bind(ownerId, threadId));
         let handle;
+        const state = { connected: false };
         handle = await startSession({
           config: settings.config,
           callbackReason: callback
             ? { reason: callback.reason, context: callback.context }
             : undefined,
-          executor: resolved.executor ?? executor,
+          executor: {
+            runSelectedSession: (...args) =>
+              calls.runDelegatedTask(
+                { ownerId, environmentId, threadId, voiceSessionId: binding.voiceSessionId },
+                () => (resolved.executor ?? executor).runSelectedSession(...args),
+                handle?.id,
+              ),
+          },
+          onConnectionChange: (connected) => {
+            state.connected = connected;
+          },
           onTranscript: (entry) => onTranscript?.(binding, entry),
           binding,
           context: getContext(ownerId, binding.voiceSessionId),
@@ -102,7 +116,15 @@ export function installVoicePrototype(
           return;
         }
         if (callback) incoming.finish(ownerId, callback.id, "accepted");
-        sessions.set(handle.id, { ...handle, key, ownerId, environmentId });
+        sessions.set(handle.id, {
+          ...handle,
+          key,
+          ownerId,
+          environmentId,
+          get connected() {
+            return state.connected;
+          },
+        });
         const { close: _close, notify: _notify, ...connection } = handle;
         res.json(connection);
       } catch (error) {
@@ -161,16 +183,7 @@ export function installVoicePrototype(
     )
       return res.status(400).json({ error: "A bounded reason and context are required." });
     void describe(req)
-      .then((target) =>
-        callUser({
-          sessions,
-          incoming,
-          starting,
-          target,
-          reason: reason.trim(),
-          context,
-        }),
-      )
+      .then((target) => calls.request(target, reason.trim(), context))
       .then((result) => res.json(result))
       .catch(() =>
         res
@@ -186,12 +199,7 @@ export function installVoicePrototype(
       .then(() => res.status(204).end())
       .catch(() => res.status(502).end());
   });
-  return Object.assign(() => Promise.allSettled([...sessions.values()].map((s) => s.close())), {
-    closeTarget: (ownerId, environmentId) =>
-      Promise.allSettled(
-        [...sessions.values()]
-          .filter((s) => s.ownerId === ownerId && s.environmentId === environmentId)
-          .map((s) => s.close()),
-      ),
+  return Object.assign(() => calls.close(), {
+    closeTarget: (ownerId, environmentId) => calls.closeTarget(ownerId, environmentId),
   });
 }

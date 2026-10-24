@@ -112,14 +112,15 @@ export function saveAgentSettings(file, input) {
   return readAgentSettings(saved);
 }
 export function mountAgentSettings(app, env = process.env) {
-  const file = env.VOICE_COMPARE_CONFIG_FILE;
-  if (!file) return;
+  const file = env.VOICE_COMPARE_CONFIG_FILE || env.VOICE_CONFIG_FILE;
   const active = readAgentSettings(env);
   const snapshot = () => {
-    const saved = NodeUtil.parseEnv(NodeFS.readFileSync(file, "utf8"));
+    const saved =
+      file && NodeFS.existsSync(file) ? NodeUtil.parseEnv(NodeFS.readFileSync(file, "utf8")) : env;
     const config = readAgentSettings(saved);
     return {
       config,
+      writable: Boolean(file),
       active,
       llmKeyConfigured: Boolean(saved.T3_VOICE_LLM_KEY),
       restartRequired:
@@ -129,6 +130,11 @@ export function mountAgentSettings(app, env = process.env) {
   };
   app.get("/agent-settings", (_req, res) => res.json(snapshot()));
   app.patch("/agent-settings", (req, res) => {
+    if (!file)
+      return res.status(503).json({
+        error:
+          "Service configuration is read-only. Conversation and callback settings can still be saved.",
+      });
     try {
       saveAgentSettings(file, req.body);
       res.json(snapshot());

@@ -43,6 +43,9 @@ process.on("message", (message) => {
     void startLivekitPrototype({
       ...message.options,
       onClose: () => void close(),
+      onConnectionChange: (connected) => {
+        if (process.connected) process.send({ type: "connection", connected });
+      },
       onTranscript: (entry) => {
         if (process.connected) process.send({ type: "transcript", entry });
       },

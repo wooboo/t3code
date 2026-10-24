@@ -4,7 +4,7 @@ import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeUtil from "node:util";
-import { readAgentSettings, saveAgentSettings } from "./agent-settings.mjs";
+import { mountAgentSettings, readAgentSettings, saveAgentSettings } from "./agent-settings.mjs";
 import { VoiceSettingsStore } from "../src/voice-settings.mjs";
 
 NodeTest.test(
@@ -87,3 +87,63 @@ NodeTest.test("custom API credentials persist privately and can be removed", (t)
   );
   NodeAssert.throws(() => saveAgentSettings(file, { ...config, llmUrl: "" }), /API URL/);
 });
+
+NodeTest.test(
+  "agent settings are readable without a compare config and explicit service writes stay unavailable",
+  () => {
+    const routes = new Map();
+    const app = Object.fromEntries(
+      ["get", "patch", "post"].map((method) => [
+        method,
+        (path, handler) => routes.set(`${method}:${path}`, handler),
+      ]),
+    );
+    mountAgentSettings(app, { T3_VOICE_LLM_KEY: "secret", T3_VOICE_LLM_MODEL: "configured-model" });
+    let body;
+    let status = 200;
+    const response = {
+      json: (value) => {
+        body = value;
+      },
+      status: (code) => {
+        status = code;
+        return response;
+      },
+    };
+    routes.get("get:/agent-settings")({}, response);
+    NodeAssert.equal(status, 200);
+    NodeAssert.equal(body.config.llmModel, "configured-model");
+    NodeAssert.equal(body.writable, false);
+    NodeAssert.equal(body.restartRequired, false);
+    NodeAssert.equal(JSON.stringify(body).includes("secret"), false);
+    routes.get("patch:/agent-settings")({ body: readAgentSettings({}) }, response);
+    NodeAssert.equal(status, 503);
+  },
+);
+
+NodeTest.test(
+  "service settings support VOICE_CONFIG_FILE independently of the compare launcher",
+  (t) => {
+    const dir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "voice-config-"));
+    t.after(() => NodeFS.rmSync(dir, { recursive: true, force: true }));
+    const routes = new Map();
+    const app = Object.fromEntries(
+      ["get", "patch", "post"].map((method) => [
+        method,
+        (path, handler) => routes.set(`${method}:${path}`, handler),
+      ]),
+    );
+    mountAgentSettings(app, { VOICE_CONFIG_FILE: NodePath.join(dir, "voice.env") });
+    let body;
+    routes.get("patch:/agent-settings")(
+      { body: { ...readAgentSettings({}), silenceMs: 700 } },
+      {
+        json: (value) => {
+          body = value;
+        },
+      },
+    );
+    NodeAssert.equal(body.writable, true);
+    NodeAssert.equal(body.config.silenceMs, 700);
+  },
+);

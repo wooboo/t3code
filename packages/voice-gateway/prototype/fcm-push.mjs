@@ -18,7 +18,7 @@ export function createFcmPush(file, { fetcher = fetch, auth } = {}) {
       scopes: ["https://www.googleapis.com/auth/firebase.messaging"],
     });
   const supports = (device) => device.provider === "fcm" && device.projectId === projectId;
-  const send = async (input, invitation) => {
+  const send = async (input, invitation, { kind = "voice_call", ttlSeconds = 45 } = {}) => {
     const device = validateCallbackDevice(input);
     if (!supports(device)) throw Error("Register this phone with the configured Firebase project");
     const token = await client.getAccessToken();
@@ -32,9 +32,9 @@ export function createFcmPush(file, { fetcher = fetch, auth } = {}) {
         body: JSON.stringify({
           message: {
             token: device.token,
-            android: { priority: "HIGH", ttl: "45s" },
+            android: { priority: "HIGH", ttl: `${ttlSeconds}s` },
             data: {
-              t3_kind: "voice_call",
+              t3_kind: kind,
               hostEnvironmentId: device.hostEnvironmentId,
               ...invitation,
             },
